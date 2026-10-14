@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+dashboard/dist/
+
+# Local runtime data
+data/
+
+# Large binaries / models
+llama.cpp/
+llama-*.zip
+tts/
+
+# Env / editor
+.env
+.vscode/
