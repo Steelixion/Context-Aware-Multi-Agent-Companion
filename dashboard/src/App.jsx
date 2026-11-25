@@ -20,6 +20,7 @@ export default function App() {
         <div className="flex flex-wrap gap-2">
           <Chip tone={c.connected ? "green" : "red"}>{c.connected ? "connected" : "reconnecting…"}</Chip>
           <Chip>vision: {c.info?.vision_mode || "—"}</Chip>
+          <Chip>stt: {c.stt || "—"}</Chip>
           <Chip>tts: {c.info?.tts || "—"}</Chip>
           <Chip>embeddings: {c.info?.embedder?.split("/").pop() || "—"}</Chip>
         </div>
@@ -28,12 +29,12 @@ export default function App() {
       <main className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-1">
           <Camera frame={c.frame} info={c.info} tel={c.tel} setSim={c.setSim} />
-          <DriverState tel={c.tel} info={c.info} />
+          <DriverState tel={c.tel} calibration={c.calibration} calibrate={c.calibrate} />
         </div>
         <div className="space-y-4 lg:col-span-2">
-          <Timeline series={c.series} earThreshold={c.info?.ear_threshold} />
+          <Timeline series={c.series} />
           <div className="h-[28rem]">
-            <ChatPane chat={c.chat} sendChat={c.sendChat} speaking={c.speaking} info={c.info} />
+            <ChatPane chat={c.chat} sendChat={c.sendChat} speaking={c.speaking} info={c.info} llmOnline={c.llmOnline} />
           </div>
         </div>
         <div className="lg:col-span-1"><Memories tick={c.memTick} /></div>

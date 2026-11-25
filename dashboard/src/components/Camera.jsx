@@ -1,16 +1,17 @@
 import React from "react";
 import { Card, Chip } from "./ui.jsx";
 
-const MODES = [["normal", "Alert"], ["yawning", "Yawning"], ["nodding", "Head nod"], ["drowsy", "Drowsy"], ["no_face", "No face"]];
+const MODES = [["normal", "Alert"], ["drowsy", "Drowsy"], ["yawning", "Yawning"], ["nodding", "Head drop"],
+  ["distracted", "Distracted"], ["slouching", "Slouching"], ["no_face", "No face"]];
 
 export default function Camera({ frame, info, tel, setSim }) {
-  const sim = info?.vision_mode === "sim";
+  const known = info != null, sim = info?.vision_mode === "sim";
   return (
-    <Card title="In-cabin camera" right={<Chip tone={sim ? "amber" : "green"}>{sim ? "simulator" : "live camera"}</Chip>}>
+    <Card title="In-cabin camera" right={<Chip tone={!known ? "slate" : sim ? "amber" : "green"}>{!known ? "connecting…" : sim ? "simulator" : "live camera"}</Chip>}>
       <div className="flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-black">
         {frame ? <img alt="driver" className="h-full w-full object-cover" src={`data:image/jpeg;base64,${frame}`} />
           : <span className="px-6 text-center text-sm text-slate-500">
-              {sim ? "Simulator mode: no video. Use the scenarios below to drive the pipeline." : "Waiting for camera…"}
+              {!known ? "Connecting…" : sim ? "Simulator mode: no video. Use the scenarios below to drive the pipeline." : "Waiting for camera…"}
             </span>}
       </div>
       {sim && (

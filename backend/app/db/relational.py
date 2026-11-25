@@ -1,6 +1,7 @@
 """Async SQLite access (aiosqlite). Never blocks the event loop."""
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from pathlib import Path
@@ -69,6 +70,31 @@ class Database:
             """SELECT l.* FROM monitoring_logs l JOIN monitoring_records r USING(record_id)
                WHERE r.user_id=? ORDER BY l.ts DESC LIMIT ?""", (user_id, limit))
         return [dict(r) for r in await cur.fetchall()]
+
+    # ---- calibration profiles ----
+    async def save_profile(self, user_id: str, profile: dict, keep: int = 10) -> None:
+        """Store a calibration profile (newest = active); keep the last `keep` per driver."""
+        await self.conn.execute(
+            "INSERT INTO calibration_profiles(user_id, created_at, frames, profile_json) VALUES (?,?,?,?)",
+            (user_id, profile.get("created_at") or time.time(), int(profile.get("frames") or 0),
+             json.dumps(profile)))
+        await self.conn.execute(
+            """DELETE FROM calibration_profiles WHERE user_id=? AND profile_id NOT IN
+               (SELECT profile_id FROM calibration_profiles WHERE user_id=?
+                ORDER BY created_at DESC, profile_id DESC LIMIT ?)""", (user_id, user_id, keep))
+        await self.conn.commit()
+
+    async def latest_profile(self, user_id: str) -> dict | None:
+        cur = await self.conn.execute(
+            "SELECT profile_json FROM calibration_profiles WHERE user_id=?"
+            " ORDER BY created_at DESC, profile_id DESC LIMIT 1", (user_id,))
+        row = await cur.fetchone()
+        if row is None:
+            return None
+        try:
+            return json.loads(row["profile_json"])
+        except (TypeError, ValueError):
+            return None
 
     # ---- monitoring ----
     async def start_record(self, user_id: str) -> str:

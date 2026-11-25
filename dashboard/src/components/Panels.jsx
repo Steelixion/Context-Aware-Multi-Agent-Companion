@@ -61,16 +61,16 @@ export function History({ alerts }) {
   return (
     <Card title="Monitoring log" right={<Chip>{data.records.length} sessions</Chip>}>
       <div className="max-h-56 overflow-y-auto">
-        <table className="w-full text-left text-xs">
+        <table className="w-full text-left text-xs [&_td]:pr-3 [&_th]:pr-3">
           <thead className="sticky top-0 bg-slate-900 text-slate-400">
-            <tr><th className="py-1">Time</th><th>State</th><th>Level</th><th>Fatigue</th><th>Safety prompt</th></tr>
+            <tr><th className="py-1">Time</th><th>State</th><th>Level</th><th>Risk</th><th>Safety prompt</th></tr>
           </thead>
           <tbody>
             {data.logs.map((l) => (
               <tr key={l.log_id} className="border-t border-slate-800">
-                <td className="py-1 font-mono">{fmt(l.ts)}</td><td>{l.driver_state}</td>
+                <td className="whitespace-nowrap py-1 font-mono">{fmt(l.ts)}</td><td>{l.driver_state}</td>
                 <td className={l.drowsiness_level === "HIGH" ? "text-red-400" : ""}>{l.drowsiness_level}</td>
-                <td>{l.fatigue_score?.toFixed(2)}</td><td className="max-w-[14rem] truncate">{l.safety_prompt || ""}</td>
+                <td>{l.fatigue_score?.toFixed(2)}</td><td className="max-w-[14rem] truncate" title={l.safety_prompt || ""}>{l.safety_prompt || ""}</td>
               </tr>
             ))}
           </tbody>

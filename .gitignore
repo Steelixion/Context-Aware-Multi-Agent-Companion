@@ -2,19 +2,28 @@
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # Node
 node_modules/
 dashboard/dist/
 
-# Local runtime data
+# Runtime data (SQLite, vector memory, encryption key, sync outbox)
 data/
 
-# Large binaries / models
+# Models and large binaries: python scripts/download_models.py fetches them into models/
+models/
 llama.cpp/
 llama-*.zip
+*.gguf
 tts/
 
-# Env / editor
+# Private documents
+Implementation.pdf
+
+# Environment, editors, OS
 .env
 .vscode/
+.idea/
+.DS_Store
+Thumbs.db

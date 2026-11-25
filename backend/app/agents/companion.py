@@ -63,6 +63,10 @@ class CompanionAgent:
         except asyncio.CancelledError:
             self._emit("assistant", "", mid, True, interrupted=True)
             raise
+        except Exception as e:  # noqa: BLE001 - a failed reply must not leave a dangling chat bubble
+            print(f"[companion] reply failed: {e}", flush=True)
+            self._emit("assistant", "", mid, True, interrupted=True)
+            return
         s.history += [{"role": "user", "content": msg["text"]},
                       {"role": "assistant", "content": reply}]
         s.history = s.history[-12:]

@@ -2,8 +2,7 @@ import React from "react";
 
 export const LEVEL = {
   ALERT:    { label: "Alert",    ring: "text-emerald-400", bg: "bg-emerald-500/15 text-emerald-300 border-emerald-500/40" },
-  MILD:     { label: "Mild",     ring: "text-yellow-300",  bg: "bg-yellow-500/15 text-yellow-200 border-yellow-500/40" },
-  MODERATE: { label: "Moderate", ring: "text-orange-400",  bg: "bg-orange-500/15 text-orange-300 border-orange-500/40" },
+  MILD:     { label: "Mild drowsiness", ring: "text-amber-300", bg: "bg-amber-500/15 text-amber-200 border-amber-500/40" },
   HIGH:     { label: "DROWSY",   ring: "text-red-500",     bg: "bg-red-500/20 text-red-300 border-red-500/60" },
 };
 

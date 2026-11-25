@@ -1,7 +1,20 @@
-"""Safety Agent: deterministic (no LLM), consumes telemetry, preempts everything on danger."""
+"""Safety Agent: deterministic (no LLM). Consumes telemetry and preempts everything on danger.
+
+Rules (Implementation ch. 6.3-6.4, Table 6.2):
+  HIGH (R >= 0.85: microsleep, head drop or sustained fatigue) -> urgent warning; all chat is
+      stopped and muted (preempt); repeated every warning_repeat_seconds while HIGH
+  MILD (0.50 <= R < 0.85) held for 20 s -> spoken check-in, then none for 120 s
+  eyes off the road for distraction_seconds -> spoken reminder (cooldown)
+  posture unstable (D_t > 1 for 5 s)        -> spoken reminder (cooldown)
+  face not visible for face_lost_seconds    -> spoken reminder
+  no telemetry for watchdog_seconds         -> "camera signal lost" warning
+Low-quality telemetry (head turned away, occlusion) never raises drowsiness alarms; the vision
+pipeline already holds the risk, and nothing is spoken (6.4.3).
+"""
 from __future__ import annotations
 
 import asyncio
+import math
 import time
 from typing import Callable
 
@@ -20,7 +33,26 @@ WARNINGS = {
 }
 SENSOR_LOST = "Driver monitoring camera signal lost. Please stay alert."
 FACE_LOST = "I can't see your face. Please keep your eyes on the road and face the camera."
-ADVISORY = "You seem tired. Consider taking a break soon."
+CHECK_IN = "You seem a little tired. How are you feeling? A short break could help."
+DISTRACTED = "Please keep your eyes on the road."
+POSTURE = "Your posture has slumped. Try sitting upright, and take a break if you feel tired."
+STATE_DEBOUNCE_S = 1.0   # a driver-state change is logged once it has held this long
+
+
+def driver_state(t: dict, long_closure_ms: float) -> str:
+    if not t.get("face_detected", False):
+        return "NO_FACE"
+    if t.get("eyes_closed_ms", 0) >= long_closure_ms:
+        return "EYES_CLOSED"
+    if t.get("head_drop"):
+        return "HEAD_DROP"
+    if t.get("yawning"):
+        return "YAWNING"
+    if (t.get("gaze") or {}).get("distracted"):
+        return "DISTRACTED"
+    if (t.get("posture") or {}).get("unstable"):
+        return "POSTURE"
+    return "ATTENTIVE"
 
 
 class SafetyAgent:
@@ -28,12 +60,13 @@ class SafetyAgent:
                  db: Database, cancel_companion: Callable[[], None]):
         self.cfg, self.bus, self.s, self.arbiter, self.db = cfg, bus, session, arbiter, db
         self.cancel_companion = cancel_companion
-        self.closed_since: float | None = None
-        self.last_warn = 0.0
-        self.last_advisory = 0.0
-        self.last_face_warn = 0.0
+        never = -math.inf
+        self.last_warn = self.last_checkin = self.last_distract = self.last_posture = never
+        self.last_face_warn = never
+        self.mild_since: float | None = None
         self.face_missing_since: float | None = None
-        self.last_level = "ALERT"
+        self.logged = ("ATTENTIVE", "ALERT")
+        self.candidate, self.candidate_since = self.logged, 0.0
         self.last_tel = time.time()
         self.lost_notified = False
 
@@ -47,28 +80,42 @@ class SafetyAgent:
                 continue
             self.last_tel, self.lost_notified = time.time(), False
             self.s.telemetry = tel
-            await self._evaluate(tel)
+            try:
+                await self._evaluate(tel)
+            except Exception as e:  # noqa: BLE001 - one bad message must not stop the safety loop
+                print(f"[safety] evaluation failed: {e}", flush=True)
 
     async def _evaluate(self, t: dict) -> None:
-        now, cfg = t["ts"], self.cfg
-        # --- spec rule: EAR < 0.20 continuously for > 1.5 s
-        if t["face_detected"] and t["ear"] < cfg.ear_threshold:
-            self.closed_since = self.closed_since or now
+        cfg, now = self.cfg, t["ts"]
+        level = t["drowsiness_level"]
+        quality_ok = t.get("quality", 1.0) >= cfg.quality_min
+        long_closure_ms = cfg.long_closure_seconds * 1000
+
+        if level == "HIGH" and quality_ok:
+            if now - self.last_warn >= cfg.warning_repeat_seconds:
+                self.last_warn = now
+                reason = ("eyes_closed" if t.get("eyes_closed_ms", 0) >= long_closure_ms else
+                          "head_drop" if t.get("head_drop") else "sustained_fatigue")
+                await self._raise("CRITICAL", WARNINGS.get(self.s.lang, WARNINGS["en"]), t, reason)
+
+        if level == "MILD" and quality_ok:
+            self.mild_since = self.mild_since or now
+            if (now - self.mild_since >= cfg.mild_checkin_seconds
+                    and now - self.last_checkin >= cfg.mild_checkin_cooldown):
+                self.last_checkin = now
+                await self._raise("ADVISORY", CHECK_IN, t, "mild_fatigue", preempt=False)
         else:
-            self.closed_since = None
-        eyes_closed = self.closed_since is not None and now - self.closed_since > cfg.ear_seconds
-        critical = eyes_closed or t["fatigue_score"] >= cfg.fatigue_high
+            self.mild_since = None
 
-        if critical and now - self.last_warn >= cfg.warning_repeat_seconds:
-            self.last_warn = now
-            reason = "eyes_closed" if eyes_closed else "sustained_fatigue"
-            await self._raise("CRITICAL", WARNINGS.get(self.s.lang, WARNINGS["en"]), t, reason)
-        elif t["drowsiness_level"] == "MODERATE" and not critical and now - self.last_advisory > 60:
-            self.last_advisory = now
-            await self._raise("ADVISORY", ADVISORY, t, "moderate_fatigue", preempt=False)
+        if (t.get("gaze") or {}).get("distracted") and now - self.last_distract >= cfg.distraction_cooldown:
+            self.last_distract = now
+            await self._raise("ADVISORY", DISTRACTED, t, "distracted", preempt=False)
 
-        # face lost for a while (looking away / covered camera)
-        if not t["face_detected"]:
+        if (t.get("posture") or {}).get("unstable") and now - self.last_posture >= cfg.posture_cooldown:
+            self.last_posture = now
+            await self._raise("ADVISORY", POSTURE, t, "posture", preempt=False)
+
+        if not t["face_detected"]:   # looking away for long / camera covered
             self.face_missing_since = self.face_missing_since or now
             if now - self.face_missing_since > cfg.face_lost_seconds and now - self.last_face_warn > 30:
                 self.last_face_warn = now
@@ -76,11 +123,18 @@ class SafetyAgent:
         else:
             self.face_missing_since = None
 
-        if t["drowsiness_level"] != self.last_level:
-            self.last_level = t["drowsiness_level"]
-            await self._log(t, None)
-        self.bus.publish("state", dict(level=t["drowsiness_level"], fatigue=t["fatigue_score"],
+        await self._log_state(t, driver_state(t, long_closure_ms), level, now)
+        self.bus.publish("state", dict(level=level, fatigue=t["fatigue_score"], risk=t.get("risk", 0.0),
                                        safety_active=self.s.safety_active))
+
+    async def _log_state(self, t: dict, state: str, level: str, now: float) -> None:
+        """Log a (state, level) change once it has held STATE_DEBOUNCE_S (no flicker spam)."""
+        key = (state, level)
+        if key != self.candidate:
+            self.candidate, self.candidate_since = key, now
+        elif key != self.logged and now - self.candidate_since >= STATE_DEBOUNCE_S:
+            self.logged = key
+            await self._log(t, None, state)
 
     async def _watchdog(self) -> None:
         if time.time() - self.last_tel > self.cfg.watchdog_seconds and not self.lost_notified:
@@ -90,20 +144,22 @@ class SafetyAgent:
     async def _raise(self, severity: str, text: str, t: dict, reason: str, preempt: bool = True):
         self.bus.publish("alert", dict(ts=time.time(), severity=severity, reason=reason, text=text))
         if preempt:
-            self.cancel_companion()                    # stop generating chat
+            self.cancel_companion()                        # stop generating chat
             await self.arbiter.preempt(text, self.s.lang)  # mute chat + warn
         else:
             await self.arbiter.say(text, self.s.lang)
-        await self._log(t, text)
+        if reason == "sensor_lost" or not t:
+            state = "SENSOR_LOST"
+        else:
+            state = driver_state(t, self.cfg.long_closure_seconds * 1000)
+        await self._log(t, text, state)
 
-    async def _log(self, t: dict, prompt: str | None) -> None:
+    async def _log(self, t: dict, prompt: str | None, state: str) -> None:
         try:
             await self.db.log_event(
-                self.s.record_id,
-                "EYES_CLOSED" if (t.get("eyes_closed_ms", 0) > 0) else
-                ("YAWNING" if t.get("mar", 0) > 0.6 else
-                 ("NO_FACE" if t and not t.get("face_detected", True) else "ATTENTIVE")),
-                t.get("drowsiness_level", "HIGH"), fatigue_score=t.get("fatigue_score"),
-                ear=t.get("ear"), mar=t.get("mar"), safety_prompt=prompt, emotion=self.s.emotion)
+                self.s.record_id, state, t.get("drowsiness_level", "HIGH") if t else "HIGH",
+                fatigue_score=t.get("risk", t.get("fatigue_score")) if t else None,
+                ear=t.get("ear") if t else None, mar=t.get("mar") if t else None,
+                safety_prompt=prompt, emotion=self.s.emotion)
         except Exception as e:  # noqa: BLE001
-            print(f"[safety] log failed: {e}")
+            print(f"[safety] log failed: {e}", flush=True)

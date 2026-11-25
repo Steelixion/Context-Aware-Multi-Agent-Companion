@@ -1,0 +1,8 @@
+# Store text with LF in the repository; Git converts per platform on checkout.
+* text=auto
+
+*.png  binary
+*.jpg  binary
+*.onnx binary
+*.task binary
+*.wav  binary

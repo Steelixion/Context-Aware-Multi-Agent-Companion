@@ -1,16 +1,33 @@
 [project]
 name = "driver-companion"
-version = "0.1.0"
-requires-python = ">=3.11"
+version = "0.2.0"
+description = "Context-aware multi-agent driver companion: on-device drowsiness monitoring and voice assistant"
+requires-python = ">=3.10"
 dependencies = [
   "aiosqlite>=0.20",
   "lancedb>=0.13",
   "pydantic>=2.7",
   "fastapi>=0.111",
   "uvicorn[standard]>=0.30",
+  "httpx>=0.27",
+  "numpy",
   "cryptography>=42",
   "langgraph>=0.2",
+  "soundfile",
+  "sounddevice",
+  "pyttsx3",
+  "piper-tts",
+  "sherpa-onnx>=2.0.0",
+  "mediapipe>=1.2",
+  "onnxruntime",
 ]
+
 [project.optional-dependencies]
-vision = ["mediapipe", "opencv-python", "torch", "numpy"]
-audio = ["faster-whisper", "piper-tts", "onnxruntime"]
+memory = ["fastembed"]
+emotion = ["transformers", "torch"]
+sync = ["keyring"]
+dev = ["pytest>=8", "onnx>=1.16"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

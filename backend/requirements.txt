@@ -1,4 +1,5 @@
-# core (runs the whole app in simulator mode + text chat)
+# Runtime dependencies (simulator, camera, voice, chat, memory, sync).
+# Models are downloaded separately: python scripts/download_models.py
 aiosqlite>=0.20
 lancedb>=0.13
 pydantic>=2.7
@@ -12,8 +13,11 @@ soundfile
 sounddevice
 pyttsx3
 piper-tts
-# optional extras:
-#   vision:  opencv-python mediapipe            (python 3.10-3.12 recommended for mediapipe)
-#   memory:  fastembed                          (real multilingual embeddings; falls back to hashing)
-#   voice:   faster-whisper transformers torch  (STT / speech-emotion)
-#   sync:    keyring
+sherpa-onnx>=2.0.0     # speech-to-text (Omnilingual ASR) and VAD (Silero), CPU
+mediapipe>=1.2         # Face + Pose Landmarker; brings opencv-contrib-python
+onnxruntime            # trained TCN (DC_TEMPORAL_MODEL); also used by piper-tts
+
+# Optional:
+#   fastembed            real multilingual embeddings (otherwise a hashed-trigram fallback)
+#   transformers torch   speech-emotion model (DC_SER_MODEL)
+#   keyring              store the sync key in the OS keyring

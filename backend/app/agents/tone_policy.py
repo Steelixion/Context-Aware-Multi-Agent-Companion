@@ -2,16 +2,22 @@
 
 LANG_NAMES = {"en": "English", "es": "Spanish", "fr": "French", "de": "German", "ur": "Urdu",
               "ar": "Arabic", "hi": "Hindi", "zh": "Chinese", "pt": "Portuguese", "it": "Italian",
-              "tr": "Turkish", "ru": "Russian"}
+              "tr": "Turkish", "ru": "Russian", "fa": "Persian", "uk": "Ukrainian", "el": "Greek",
+              "he": "Hebrew", "hy": "Armenian", "bn": "Bengali", "pa": "Punjabi", "gu": "Gujarati",
+              "ta": "Tamil", "te": "Telugu", "kn": "Kannada", "ml": "Malayalam", "th": "Thai",
+              "ka": "Georgian", "am": "Amharic", "ja": "Japanese", "ko": "Korean",
+              "mr": "Marathi", "ne": "Nepali"}
 
 
 def tone_instructions(level: str, emotion: str, fatigue: float) -> str:
     parts = []
-    if level in ("HIGH", "MODERATE"):
-        parts.append("The driver shows signs of fatigue. Use short, energetic, engaging sentences, "
-                     "ask simple questions to keep them mentally active, and gently suggest a rest stop.")
-    elif level == "MILD":
-        parts.append("The driver is slightly tired. Be lively and warm; keep it light.")
+    if level == "HIGH":
+        parts.append("The driver is very drowsy. Say only one short sentence urging them to stop "
+                     "somewhere safe and rest.")
+    elif level == "MILD":   # Table 6.2: shorter, simpler, more engaging questions
+        parts.append("The driver shows mild signs of fatigue. Use short, simple, energetic sentences, "
+                     "ask an easy, interesting question to keep them mentally active, and gently "
+                     "suggest a rest stop.")
     else:
         parts.append("The driver is alert. Be relaxed, friendly and conversational.")
     if emotion in ("angry", "stressed"):

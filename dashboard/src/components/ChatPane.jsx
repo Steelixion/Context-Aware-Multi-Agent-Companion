@@ -3,7 +3,7 @@ import { Card, Chip } from "./ui.jsx";
 
 const EMOTIONS = ["neutral", "happy", "sad", "stressed", "angry"];
 
-export default function ChatPane({ chat, sendChat, speaking, info }) {
+export default function ChatPane({ chat, sendChat, speaking, info, llmOnline }) {
   const [text, setText] = useState("");
   const [emotion, setEmotion] = useState("neutral");
   const end = useRef(null);
@@ -21,7 +21,7 @@ export default function ChatPane({ chat, sendChat, speaking, info }) {
   return (
     <Card title="Companion" className="flex h-full min-h-[24rem] flex-col"
       right={<div className="flex gap-2">
-        <Chip tone={info?.llm_online ? "green" : "amber"}>{info?.llm_online ? "LLM online" : "LLM offline"}</Chip>
+        <Chip tone={llmOnline ? "green" : "amber"}>{llmOnline ? "LLM online" : "LLM offline"}</Chip>
         {speaking && <Chip tone={speaking.priority === 0 ? "red" : "green"}>{speaking.priority === 0 ? "WARNING" : "speaking"}</Chip>}
       </div>}>
       <div className="flex-1 space-y-2 overflow-y-auto pr-1">

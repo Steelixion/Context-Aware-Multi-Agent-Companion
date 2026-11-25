@@ -37,7 +37,10 @@ class LLMClient:
                     data = line[5:].strip()
                     if data == "[DONE]":
                         return
-                    delta = json.loads(data)["choices"][0]["delta"].get("content")
+                    try:
+                        delta = json.loads(data)["choices"][0]["delta"].get("content")
+                    except (ValueError, KeyError, IndexError, TypeError, AttributeError):
+                        continue   # malformed line, or a usage-only chunk with "choices": []
                     if delta:
                         yield delta
         except httpx.HTTPError as e:

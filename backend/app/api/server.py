@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
@@ -55,8 +53,8 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         s = rt.session
         return dict(user_id=s.user_id, name=s.name, lang=s.lang, record_id=s.record_id,
                     vision_mode=cfg.vision_mode, mic=cfg.enable_mic, tts=rt.tts.engine_name,
-                    embedder=rt.embedder.name, llm_online=await rt.llm.available(),
-                    ear_threshold=cfg.ear_threshold, ear_seconds=cfg.ear_seconds)
+                    stt=rt.listener.engine if rt.listener else "off",
+                    embedder=rt.embedder.name, llm_online=rt.llm_online)
 
     @app.post("/api/profile")
     async def profile(p: Profile):
@@ -93,6 +91,16 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         rt.sync.trigger()
         return {"ok": True}
 
+    @app.get("/api/calibration")
+    async def calibration():
+        return rt.calibration
+
+    @app.post("/api/calibrate")
+    async def calibrate():
+        """Start a new calibration: look ahead normally for ~10 s."""
+        rt.calibrate()
+        return {"ok": True}
+
     @app.post("/api/sim")
     async def sim(m: SimMode):
         if cfg.vision_mode != "sim":
@@ -111,8 +119,11 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         await sock.accept()
         q = rt.bus.subscribe("*", maxsize=200)
         s = rt.session
+        # status changes after this arrive as 'stt' events on the same (ordered) socket
+        stt = rt.listener.engine if rt.listener else "off"
         await sock.send_text(json.dumps(dict(type="snapshot", chat=s.chat_log, sync=rt.sync.status,
-                                             name=s.name, lang=s.lang)))
+                                             name=s.name, lang=s.lang, stt=stt, llm_online=rt.llm_online,
+                                             calibration=rt.calibration)))
 
         async def sender():
             last_tel = 0.0
@@ -127,12 +138,20 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         send_task = asyncio.create_task(sender())
         try:
             while True:
-                data = json.loads(await sock.receive_text())
-                if data.get("type") == "chat" and data.get("text", "").strip():
-                    rt.bus.publish("speech", dict(text=data["text"].strip(), lang=data.get("lang") or s.lang,
+                try:
+                    data = json.loads(await sock.receive_text())
+                except ValueError:
+                    continue                      # ignore malformed messages, keep the socket
+                if not isinstance(data, dict):
+                    continue
+                text = data.get("text")
+                if data.get("type") == "chat" and isinstance(text, str) and text.strip():
+                    rt.bus.publish("speech", dict(text=text.strip(), lang=data.get("lang") or s.lang,
                                                   emotion=data.get("emotion") or s.emotion, source="text"))
                 elif data.get("type") == "sim" and cfg.vision_mode == "sim":
-                    rt.set_sim(data["mode"])
+                    rt.set_sim(str(data.get("mode", "normal")))
+                elif data.get("type") == "calibrate":
+                    rt.calibrate()
         except WebSocketDisconnect:
             pass
         finally:
@@ -144,7 +163,11 @@ def create_app(cfg: Config | None = None) -> FastAPI:
 
         @app.get("/{path:path}")
         async def spa(path: str):
-            f = DIST / path
-            return FileResponse(f if f.is_file() else DIST / "index.html")
+            root = DIST.resolve()
+            f = (root / path).resolve()
+            if f.is_file() and root in f.parents and f.name != "index.html":   # never outside dist/
+                return FileResponse(f)
+            # index.html must be revalidated, or browsers keep loading the previous build's bundle
+            return FileResponse(root / "index.html", headers={"Cache-Control": "no-cache"})
 
     return app

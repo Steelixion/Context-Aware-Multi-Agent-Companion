@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS monitoring_logs (
     log_id           INTEGER PRIMARY KEY AUTOINCREMENT,
     record_id        TEXT NOT NULL REFERENCES monitoring_records(record_id) ON DELETE CASCADE,
     ts               REAL NOT NULL,
-    driver_state     TEXT NOT NULL,                  -- e.g. ATTENTIVE, YAWNING, EYES_CLOSED, DISTRACTED, NO_FACE
+    driver_state     TEXT NOT NULL,                  -- ATTENTIVE, EYES_CLOSED, HEAD_DROP, YAWNING, DISTRACTED, POSTURE, NO_FACE, SENSOR_LOST
     drowsiness_level TEXT NOT NULL CHECK (drowsiness_level IN ('ALERT','MILD','MODERATE','HIGH')),
     fatigue_score    REAL,
     ear              REAL,
@@ -43,6 +43,16 @@ CREATE TABLE IF NOT EXISTS monitoring_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_logs_record_ts ON monitoring_logs(record_id, ts);
 CREATE INDEX IF NOT EXISTS idx_logs_unsynced ON monitoring_logs(synced) WHERE synced = 0;
+
+-- Per-driver calibration baselines (Implementation ch. 6.2); the newest row is the active profile.
+CREATE TABLE IF NOT EXISTS calibration_profiles (
+    profile_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id          TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    created_at       REAL NOT NULL,
+    frames           INTEGER NOT NULL,
+    profile_json     TEXT NOT NULL                   -- {"base": {...}, "sigma": {...}, ...}
+);
+CREATE INDEX IF NOT EXISTS idx_calibration_user_time ON calibration_profiles(user_id, created_at DESC);
 
 -- Sync bookkeeping.
 CREATE TABLE IF NOT EXISTS sync_state (
