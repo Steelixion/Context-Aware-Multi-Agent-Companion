@@ -9,18 +9,9 @@ import { History, Memories, SyncPanel } from "./components/Panels.jsx";
 
 export default function App() {
   const c = useCompanion();
-  const critical = c.alert?.severity === "CRITICAL";
 
   return (
     <div className="mx-auto max-w-7xl p-4 lg:p-6">
-      {critical && <div className="flash pointer-events-none fixed inset-0 z-40 bg-red-600" />}
-      {c.alert && (
-        <div className={`fixed inset-x-0 top-0 z-50 px-6 py-4 text-center text-xl font-bold shadow-lg
-          ${critical ? "bg-red-600 text-white" : "bg-amber-500 text-black"}`} role="alert">
-          {c.alert.text}
-        </div>
-      )}
-
       <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-bold">Driver Companion</h1>

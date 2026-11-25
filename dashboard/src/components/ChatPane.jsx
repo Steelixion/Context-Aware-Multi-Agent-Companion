@@ -28,7 +28,19 @@ export default function ChatPane({ chat, sendChat, speaking, info }) {
         {chat.length === 0 && <p className="text-sm text-slate-500">Say something or type below. Facts you mention are remembered across sessions.</p>}
         {chat.map((m) => (
           <div key={m.id} className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${m.role === "user" ? "ml-auto bg-sky-600/30" : "bg-slate-800"}`}>
-            {m.text || <em className="text-slate-500">(interrupted)</em>}
+            {/* Message text */}
+{m.text || <em className="text-slate-500">(interrupted)</em>}
+{/* Timestamp with milliseconds */}
+<span className="ml-2 text-xs text-slate-400">
+  {(() => {
+    const date = new Date(m.ts * 1000);
+    // Use toLocaleTimeString with fractional seconds if supported
+    const opts = { hour: '2-digit', minute: '2-digit', second: '2-digit' } ;
+    // @ts-ignore – newest browsers support fractionalSecondDigits
+    const timeStr = date.toLocaleTimeString(undefined, { ...opts, fractionalSecondDigits: 3 });
+    return timeStr;
+  })()}
+</span>
             {m.interrupted && m.text && <em className="ml-1 text-xs text-slate-500">(interrupted)</em>}
             {m.emotion && m.role === "user" && <span className="ml-2 text-[10px] uppercase text-slate-400">{m.emotion}</span>}
           </div>
