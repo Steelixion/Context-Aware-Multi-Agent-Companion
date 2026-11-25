@@ -98,11 +98,10 @@ class DriverMonitor:
         self.model = model or TemporalModel(cfg.get("temporal_model", ""))
         self.calibrator: Calibrator | None = None
         fps = float(cfg["vision_fps"])
-        # eye closures and head drops tolerate one dropped / noisy frame. Yawns must be strictly
-        # continuous: a yawn's MAR (~1.0) sits far above the threshold (~0.45), while speech dips
-        # below it for a frame or two between syllables and must never merge into a "yawn".
+        # eye closures and head drops tolerate one dropped / noisy frame. Yawns tolerate short
+        # speech dips between syllables, but not a long pause between separate yawns.
         frame_gap = 1.5 / fps
-        self.closure, self.drop, self.yawn = _Run(frame_gap), _Run(frame_gap), _Run(0.5 / fps)
+        self.closure, self.drop, self.yawn = _Run(frame_gap), _Run(frame_gap), _Run(0.25)
         self.offroad, self.slouch = _Run(0.25), _Run(0.5)
         w = cfg["perclos_seconds"]
         self.perclos = _Window(w)
@@ -173,8 +172,9 @@ class DriverMonitor:
                 self.drop.fired = True
                 self.drops.add(now)
         eyes_closed_s = self.closure.duration if self.closure.start is not None else 0.0
+        head_drop_s = self.drop.duration if self.drop.start is not None else 0.0
         long_closure = eyes_closed_s >= c["long_closure_seconds"]
-        head_drop = self.drop.duration >= c["head_drop_seconds"]
+        head_drop = head_drop_s >= c["head_drop_seconds"]
         yawning = self.yawn.duration >= c["yawn_seconds"]
 
         # ---- gaze (6.11), relative to the calibrated baseline; only with open eyes ----
@@ -188,7 +188,9 @@ class DriverMonitor:
             if gh:
                 gaze_h, gaze_v = float(np.mean(gh)), float(np.mean(gv))
         if has_pose:   # extreme head turns count as off-road even though the frame is not "valid"
-            off_road = abs(yaw) >= c["yaw_tolerance"] or (gaze_h is not None and abs(gaze_h) >= c["gaze_tolerance"])
+            h_off = gaze_h is not None and abs(gaze_h) >= c["gaze_tolerance"]
+            v_off = gaze_v is not None and abs(gaze_v) >= c["gaze_v_tolerance"]
+            off_road = abs(yaw) >= c["yaw_tolerance"] or h_off or v_off
             self.offroad.update(now, off_road)
         else:
             off_road = False
@@ -220,14 +222,20 @@ class DriverMonitor:
         if valid:
             self.seq.append((f.ear / ear_base, mar_rel, pitch, yaw, roll, gaze_h or 0.0, gaze_v or 0.0))
         perclos = self.perclos.mean() if len(self.perclos) >= self.min_perclos_frames else 0.0
-        stats = dict(perclos=perclos, long_closures=self.long_closures.count(now),
-                     yawns=self.yawns.count(now), head_drops=self.drops.count(now))
+        stats = dict(perclos=perclos, eyes_closed_s=eyes_closed_s,
+                     yawning=yawning, head_drop_s=head_drop_s)
         self.n += 1
         if quality_ok and self.n % INFERENCE_STRIDE == 0:   # low quality: hold p_hat, no false alarms
             seq = np.asarray(self.seq, np.float32) if self.seq else None
             pt = self.model(seq, stats)
             self.p_hat = c["ema_alpha"] * pt + (1.0 - c["ema_alpha"]) * self.p_hat
-        r = 1.0 if quality_ok and (long_closure or head_drop) else 0.0
+        drowsy_cue = eyes_closed_s >= 0.6 or head_drop_s >= 0.6 or yawning
+        if quality_ok and (long_closure or head_drop):
+            r = 1.0
+        elif quality_ok and drowsy_cue:
+            r = 0.55
+        else:
+            r = 0.0
         risk = round(max(self.p_hat, r), 3)   # level and published value must agree at 0.5 / 0.85
 
         cal_state = "calibrating" if self.calibrator else ("calibrated" if p.calibrated else "default")
@@ -240,8 +248,10 @@ class DriverMonitor:
                       v=None if gaze_v is None else round(gaze_v, 3),
                       on_road=not off_road, off_road_ms=int(off_road_s * 1000), distracted=distracted),
             posture=posture, window_s=c["perclos_seconds"], perclos=round(perclos, 3),
-            eyes_closed_ms=int(eyes_closed_s * 1000), blinks=self.blinks.count(now),
-            long_closures=stats["long_closures"], yawns=stats["yawns"], head_drops=stats["head_drops"],
+            eyes_closed_ms=int(eyes_closed_s * 1000), head_drop_ms=int(head_drop_s * 1000),
+            blinks=self.blinks.count(now),
+            long_closures=self.long_closures.count(now), yawns=self.yawns.count(now),
+            head_drops=self.drops.count(now),
             yawning=yawning, head_drop=head_drop, fatigue_score=round(self.p_hat, 3), risk=risk,
             drowsiness_level=level_from_risk(risk, c["risk_mild"], c["risk_high"]),
             calibration=Calibration(state=cal_state,

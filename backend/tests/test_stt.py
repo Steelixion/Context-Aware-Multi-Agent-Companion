@@ -1,4 +1,4 @@
-"""Omnilingual ASR engine (sherpa-onnx, CPU) and the microphone listener."""
+"""Parakeet ASR engine (sherpa-onnx, CPU) and the microphone listener."""
 import asyncio
 import inspect
 import queue
@@ -11,8 +11,7 @@ import pytest
 
 from app.audio import stt
 from app.audio.emotion import EmotionClassifier
-from app.audio.language import detect_language
-from app.audio.stt import SR, SpeechListener, Transcriber, find_model_files
+from app.audio.stt import SR, SpeechListener, Transcriber, find_parakeet_files
 from app.audio.vad import EnergySegmenter, SileroSegmenter
 from app.bus import Bus
 from app.config import Config
@@ -22,17 +21,18 @@ from .conftest import (MODEL_DIR, REFERENCES, VAD_MODEL, cer, load_wav, needs_mo
 
 
 # --------------------------------------------------------------------------- engine
-def test_find_model_files_errors(tmp_path):
+def test_find_parakeet_files_errors(tmp_path):
     for bad in ("", str(tmp_path / "missing"), str(tmp_path)):
         with pytest.raises(FileNotFoundError):
-            find_model_files(bad)
+            find_parakeet_files(bad)
 
 
-def test_find_model_files_prefers_int8(tmp_path):
-    for name in ("model.onnx", "model.int8.onnx", "tokens.txt"):
+def test_find_parakeet_files(tmp_path):
+    from app.audio.stt import PARAKEET_FILES
+    for name in PARAKEET_FILES:
         (tmp_path / name).write_bytes(b"")
-    model, tokens = find_model_files(tmp_path)
-    assert model.name == "model.int8.onnx" and tokens.name == "tokens.txt"
+    found = find_parakeet_files(tmp_path)
+    assert [p.name for p in found] == list(PARAKEET_FILES)
 
 
 def test_cpu_only():
@@ -41,17 +41,16 @@ def test_cpu_only():
 
 
 @needs_model
-def test_config_autodetects_the_omnilingual_model():
-    assert "omnilingual-asr-1600-languages-300M-ctc-v2-int8" in MODEL_DIR
+def test_config_autodetects_the_parakeet_model():
+    assert "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8" in MODEL_DIR
 
 
 @needs_model
-@pytest.mark.parametrize("lang", ["en", "de", "fr", "es"])
+@pytest.mark.parametrize("lang", ["en"])
 def test_transcribes_sample_wavs(transcriber, lang):
     audio, sr = load_wav(lang)
     text = transcriber.transcribe(audio, sr)
     assert cer(text, REFERENCES[lang]) < 0.15, text
-    assert detect_language(text) == lang, text
 
 
 @needs_model
@@ -243,20 +242,20 @@ def test_log_survives_unencodable_consoles(monkeypatch):
 @needs_model
 @needs_vad
 def test_run_with_fake_microphone(fake_mic):
-    fake_mic.audio = np.concatenate([silence(0.5), speech16k("fr"), silence(2)])
+    fake_mic.audio = np.concatenate([silence(0.5), speech16k("en"), silence(2)])
     lst, published = _listener(lang="en")
-    assert lst.engine == "omnilingual (starting)"
+    assert lst.engine == "parakeet (starting)"
     lst.start()
     deadline = time.time() + 60
     while not published and time.time() < deadline:
         time.sleep(0.1)
     lst.stop()
-    assert lst.status == "listening" and lst.engine == "omnilingual + silero VAD"
+    assert lst.status == "listening" and lst.engine == "parakeet + silero VAD"
     assert [m["status"] for _, m in lst.statuses] == ["loading", "listening"]
-    assert lst.statuses[-1][1]["engine"] == "omnilingual + silero VAD"
+    assert lst.statuses[-1][1]["engine"] == "parakeet + silero VAD"
     assert len(published) == 1, published
     msg = published[0][1]
-    assert msg["lang"] == "fr" and cer(msg["text"], REFERENCES["fr"]) < 0.15, msg
+    assert msg["lang"] == "en" and cer(msg["text"], REFERENCES["en"]) < 0.15, msg
 
 
 @needs_model
@@ -267,14 +266,14 @@ def test_run_falls_back_to_energy_vad_without_vad_model(fake_mic, tmp_path):
     assert fake_mic.opened.wait(60)
     time.sleep(0.2)
     lst.stop()
-    assert isinstance(lst.segmenter, EnergySegmenter) and lst.engine == "omnilingual + energy VAD"
+    assert isinstance(lst.segmenter, EnergySegmenter) and lst.engine == "parakeet + energy VAD"
 
 
 def test_run_without_model_reports_status(tmp_path):
     lst, published = _listener()
     lst.model_dir = str(tmp_path)
     lst._run()
-    assert lst.status == "no model" and lst.engine == "omnilingual (no model)" and not published
+    assert lst.status == "no model" and lst.engine == "parakeet (no model)" and not published
     assert [m["status"] for _, m in lst.statuses] == ["loading", "no model"]
 
 
@@ -286,4 +285,4 @@ def test_run_without_microphone_reports_status(monkeypatch, fake_mic):
     lst, _ = _listener()
     lst._run()
     assert lst.status == "no mic"
-    assert lst.statuses[-1] == ("stt", dict(status="no mic", engine="omnilingual (no mic)"))
+    assert lst.statuses[-1] == ("stt", dict(status="no mic", engine="parakeet (no mic)"))

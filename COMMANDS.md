@@ -18,11 +18,11 @@ From the repository root:
 python scripts/download_models.py --test-assets
 ```
 
-This downloads about 300 MB into `models/` (git-ignored). Every file is checked against a pinned SHA-256; run it again to resume or repair. `--test-assets` adds the three sample photos the vision tests use.
+This downloads about 460 MB compressed (~630 MB extracted) into `models/` (git-ignored). Every download is checked against a pinned SHA-256; run it again to resume or repair. `--test-assets` adds the three sample photos the vision tests use.
 
 | Folder | Contents |
 |---|---|
-| `models/stt/` | Omnilingual ASR 300M CTC v2 int8 (speech-to-text) |
+| `models/stt/` | Parakeet TDT 0.6B v2 int8 (speech-to-text, English) |
 | `models/vad/` | Silero VAD v5 |
 | `models/vision/` | MediaPipe Face Landmarker and Pose Landmarker (lite) |
 | `models/test-assets/` | sample photos for the tests |
@@ -113,7 +113,7 @@ Remove-Item Env:DC_* -ErrorAction SilentlyContinue
 Transcribe audio files (any sample rate), or the live microphone, without the full app:
 
 ```powershell
-.\.venv\Scripts\python -m app.audio.stt ..\models\stt\sherpa-onnx-omnilingual-asr-1600-languages-300M-ctc-v2-int8-2026-02-05\test_wavs\en.wav
+.\.venv\Scripts\python -m app.audio.stt ..\models\stt\sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8\test_wavs\0.wav
 ```
 
 ```powershell
@@ -159,14 +159,14 @@ Every setting is an environment variable named `DC_<NAME>`.
 | `DC_VIDEO_FILE` | | in camera mode, read this video file instead of a webcam |
 | `DC_VISION_FPS` | `15` | vision frame rate |
 | `DC_CALIBRATION_SECONDS` | `10` | length of the calibration phase |
-| `DC_YAWN_SECONDS` | `3.0` | how long the mouth must stay open for a yawn |
-| `DC_DISTRACTION_SECONDS` | `2.0` | eyes off the road this long counts as distraction |
+| `DC_YAWN_SECONDS` | `1.2` | how long the mouth must stay open for a yawn |
+| `DC_DISTRACTION_SECONDS` | `1.2` | eyes off the road this long counts as distraction |
 | `DC_TEMPORAL_MODEL` | | trained TCN (`.onnx`); see `app/vision/temporal_model.py` for the input contract |
 | `DC_FACE_MODEL`, `DC_POSE_MODEL` | `models/vision/...` | MediaPipe model files |
 | `DC_ENABLE_MIC` | `0` | `1` turns on voice input |
 | `DC_ENABLE_SPEAKER` | `1` | `0` disables audio output |
 | `DC_ASR_MODEL_DIR` | `models/stt/...` | speech-to-text model folder |
-| `DC_ASR_THREADS` | `4` | CPU threads for speech-to-text |
+| `DC_ASR_THREADS` | `2` | CPU threads for Parakeet; raise to `4` when the LLM is idle |
 | `DC_VAD_MODEL` | `models/vad/silero_vad_v5.onnx` | VAD model |
 | `DC_VAD_THRESHOLD` | `0.5` | speech probability threshold, 0-1 (higher = stricter) |
 | `DC_LLM_URL` | `http://127.0.0.1:8080/v1` | OpenAI-compatible LLM server |
@@ -182,9 +182,9 @@ Every setting is an environment variable named `DC_<NAME>`.
 
 | Symptom | Fix |
 |---|---|
-| `stt: omnilingual (no model)` in the header | run `python scripts/download_models.py` |
-| `stt: omnilingual (no mic)` | no input device found, or another app holds it exclusively |
-| `stt: omnilingual + energy VAD` | the Silero model is missing; the energy fallback only works in a quiet room |
+| `stt: parakeet (no model)` in the header | run `python scripts/download_models.py --only stt` |
+| `stt: parakeet (no mic)` | no input device found, or another app holds it exclusively |
+| `stt: parakeet + energy VAD` | the Silero model is missing; the energy fallback only works in a quiet room |
 | "camera pipeline unavailable" / no face | check the camera isn't in use by another app and isn't covered, and the face is lit and in frame; try `DC_CAMERA_INDEX=1` |
 | "Calibration failed" | the face wasn't visible for enough of the 10 s; face the camera and press Recalibrate |
 | Posture shows "shoulders not visible" | move the camera so both shoulders are in frame; posture is then monitored too |

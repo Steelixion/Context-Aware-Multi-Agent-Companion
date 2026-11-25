@@ -17,6 +17,9 @@ from .tone_policy import build_system_prompt
 
 _SENT_END = re.compile(r"(?<=[.!?。؟۔])\s+")
 OFFLINE_REPLY = "My language model isn't running right now, but I'm here and I'm watching the road with you."
+REPLY_LANG = "en"
+def _speakable(text: str) -> bool:
+    return bool(re.search(r"\w", text))
 
 
 class GState(TypedDict, total=False):
@@ -41,7 +44,8 @@ class CompanionAgent:
         q = self.bus.subscribe("speech")
         while True:
             msg = await q.get()
-            self.cancel()  # barge-in: new utterance replaces any running reply
+            if msg.get("source") != "safety":
+                self.cancel()  # barge-in: new utterance replaces any running reply
             self.task = asyncio.create_task(self._turn(msg), name="companion-turn")
 
     def cancel(self) -> None:
@@ -52,13 +56,15 @@ class CompanionAgent:
     # ---- turn ----
     async def _turn(self, msg: dict) -> None:
         s = self.s
-        s.lang = msg.get("lang") or s.lang
+        s.lang = REPLY_LANG
         s.emotion = msg.get("emotion") or s.emotion
-        self._emit("user", msg["text"], str(uuid.uuid4()), True, emotion=s.emotion)
+        internal = msg.get("source") == "safety"
+        if not internal:
+            self._emit("user", msg["text"], str(uuid.uuid4()), True, emotion=s.emotion)
         mid = str(uuid.uuid4())
         reply = ""
         try:
-            out = await self.graph.ainvoke(dict(text=msg["text"], lang=s.lang, emotion=s.emotion, msg_id=mid))
+            out = await self.graph.ainvoke(dict(text=msg["text"], lang=REPLY_LANG, emotion=s.emotion, msg_id=mid))
             reply = out.get("reply", "")
         except asyncio.CancelledError:
             self._emit("assistant", "", mid, True, interrupted=True)
@@ -67,10 +73,11 @@ class CompanionAgent:
             print(f"[companion] reply failed: {e}", flush=True)
             self._emit("assistant", "", mid, True, interrupted=True)
             return
-        s.history += [{"role": "user", "content": msg["text"]},
-                      {"role": "assistant", "content": reply}]
+        if not internal:
+            s.history += [{"role": "user", "content": msg["text"]}]
+            s.turn_queue.append(dict(user=msg["text"], assistant=reply, ts=time.time(), lang=s.lang))
+        s.history += [{"role": "assistant", "content": reply}]
         s.history = s.history[-12:]
-        s.turn_queue.append(dict(user=msg["text"], assistant=reply, ts=time.time(), lang=s.lang))
 
     def _emit(self, role, text, mid, final, **extra) -> None:
         m = dict(id=mid, role=role, text=text, final=final, ts=time.time(), **extra)
@@ -88,7 +95,7 @@ class CompanionAgent:
         return dict(memories=mem)
 
     async def _prompt(self, st: GState) -> GState:
-        sys = build_system_prompt(self.s.name, st["lang"], self.s.level, st["emotion"],
+        sys = build_system_prompt(self.s.name, REPLY_LANG, self.s.level, st["emotion"],
                                   self.s.fatigue, st["memories"])
         msgs = [{"role": "system", "content": sys}, *self.s.history[-8:],
                 {"role": "user", "content": st["text"]}]
@@ -96,17 +103,18 @@ class CompanionAgent:
 
     async def _generate(self, st: GState) -> GState:
         mid, buf, full = st["msg_id"], "", ""
+        self._emit("assistant", "", mid, False)
         try:
             async for tok in self.llm.stream(st["messages"]):
                 buf += tok
                 full += tok
-                self._emit("assistant", full, mid, False)
                 parts = _SENT_END.split(buf)
                 for sent in parts[:-1]:
-                    await self.arbiter.say(sent.strip(), st["lang"])
+                    if _speakable(sent):
+                        await self.arbiter.say(sent.strip(), REPLY_LANG)
                 buf = parts[-1]
-            if buf.strip():
-                await self.arbiter.say(buf.strip(), st["lang"])
+            if _speakable(buf):
+                await self.arbiter.say(buf.strip(), REPLY_LANG)
         except LLMUnavailable:
             full = OFFLINE_REPLY
             await self.arbiter.say(full, "en")

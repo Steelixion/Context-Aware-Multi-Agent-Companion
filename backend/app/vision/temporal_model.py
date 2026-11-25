@@ -60,13 +60,14 @@ class OnnxTCN:
 _PERCLOS_X, _PERCLOS_Y = (0.06, 0.15, 0.30, 0.40), (0.0, 0.50, 0.90, 0.95)
 
 
-def heuristic(perclos: float, long_closures: int, yawns: int, head_drops: int) -> float:
-    """Noisy-OR of the window's evidence: PERCLOS, repeated microsleeps, yawns and head drops."""
+def heuristic(perclos: float, eyes_closed_s: float = 0.0, yawning: bool = False,
+              head_drop_s: float = 0.0) -> float:
+    """Noisy-OR of current evidence: PERCLOS, current closure, current yawn and current head drop."""
     evidence = (
         float(np.interp(perclos, _PERCLOS_X, _PERCLOS_Y)),
-        min(1.0, long_closures / 2.0) * 0.85,
-        min(1.0, yawns / 3.0) * 0.60,
-        min(1.0, head_drops / 2.0) * 0.85,
+        min(1.0, eyes_closed_s / 1.5) * 0.85,
+        0.60 if yawning else 0.0,
+        min(1.0, head_drop_s / 1.5) * 0.85,
     )
     return 1.0 - math.prod(1.0 - e for e in evidence)
 
@@ -90,4 +91,5 @@ class TemporalModel:
     def __call__(self, seq: np.ndarray | None, stats: dict) -> float:
         if self.tcn is not None and seq is not None and len(seq) >= self.seq_len:
             return self.tcn(seq[-self.seq_len:])
-        return heuristic(stats["perclos"], stats["long_closures"], stats["yawns"], stats["head_drops"])
+        return heuristic(stats["perclos"], stats.get("eyes_closed_s", 0.0),
+                         stats.get("yawning", False), stats.get("head_drop_s", 0.0))

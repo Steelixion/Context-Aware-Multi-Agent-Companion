@@ -45,10 +45,10 @@ class Runtime:
         uid = user["user_id"] if user else await self.db.create_user("Driver")
         user = await self.db.get_user(uid)
         rid = await self.db.start_record(uid)
-        self.session = Session(user_id=uid, record_id=rid, name=user["display_name"],
-                               lang=user["preferred_lang"])
+        self.session = Session(user_id=uid, record_id=rid, name=user["display_name"], lang="en")
         self.profile = await self.db.latest_profile(uid)   # driver's last calibration, if any
-        self.calibration: dict = dict(state="calibrating", frames=0,
+        calibrated = bool(self.profile and self.profile.get("calibrated"))
+        self.calibration: dict = dict(state="calibrated" if calibrated else "calibrating", frames=0,
                                       profile=self.profile, stored=self.profile is not None)
 
         self.embedder = await loop.run_in_executor(None, Embedder, cfg.embed_model)
@@ -61,7 +61,8 @@ class Runtime:
         await self.arbiter.prerender(all_alert_lines())
 
         self.companion = CompanionAgent(self.bus, self.session, self.llm, self.store, self.arbiter)
-        self.safety = SafetyAgent(cfg, self.bus, self.session, self.arbiter, self.db, self.companion.cancel)
+        self.safety = SafetyAgent(cfg, self.bus, self.session, self.arbiter, self.db,
+                                  self.companion.cancel, nudge=self.nudge_companion)
         self.memory = MemoryAgent(cfg, self.bus, self.session, self.llm, self.store)
         self.sync = SyncManager(cfg, self.bus, uid)
         for coro, name in [(self.safety.run(), "safety"), (self.companion.run(), "companion"),
@@ -71,13 +72,16 @@ class Runtime:
 
         # vision runs in a separate process; daemon threads bridge its queues to the bus
         ctx = mp.get_context("spawn")
-        self.vq, self.pq, self.cq, self.eq = ctx.Queue(maxsize=8), ctx.Queue(maxsize=2), ctx.Queue(), ctx.Queue()
+        self.vq, self.pq, self.rq, self.cq, self.eq = (ctx.Queue(maxsize=8), ctx.Queue(maxsize=2),
+                                                      ctx.Queue(maxsize=2), ctx.Queue(), ctx.Queue())
         vcfg = cfg.vision_dict() | dict(profile=self.profile)
-        self.vproc = ctx.Process(target=vision_worker.main, args=(self.vq, self.pq, self.cq, self.eq, vcfg),
+        self.vproc = ctx.Process(target=vision_worker.main,
+                                 args=(self.vq, self.pq, self.cq, self.eq, vcfg, self.rq),
                                  daemon=True, name="vision")
         self.vproc.start()
         self._stop = threading.Event()
-        for q, topic in ((self.vq, "telemetry"), (self.pq, "frame"), (self.eq, "vision_event")):
+        for q, topic in ((self.vq, "telemetry"), (self.pq, "frame"), (self.rq, "frame_raw"),
+                         (self.eq, "vision_event")):
             threading.Thread(target=self._bridge, args=(q, topic), daemon=True).start()
 
         self.listener = None
@@ -130,6 +134,9 @@ class Runtime:
 
     def set_sim(self, mode: str) -> None:
         self.cq.put({"type": "sim", "mode": mode})
+
+    def nudge_companion(self, prompt: str) -> None:
+        self.bus.publish("speech", dict(text=prompt, lang="en", emotion="neutral", source="safety"))
 
     def calibrate(self) -> None:
         self.calibration = dict(self.calibration, state="calibrating")

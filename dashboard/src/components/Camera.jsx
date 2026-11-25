@@ -4,10 +4,10 @@ import { Card, Chip } from "./ui.jsx";
 const MODES = [["normal", "Alert"], ["drowsy", "Drowsy"], ["yawning", "Yawning"], ["nodding", "Head drop"],
   ["distracted", "Distracted"], ["slouching", "Slouching"], ["no_face", "No face"]];
 
-export default function Camera({ frame, info, tel, setSim }) {
+export default function Camera({ frame, info, tel, setSim, title = "In-cabin camera" }) {
   const known = info != null, sim = info?.vision_mode === "sim";
   return (
-    <Card title="In-cabin camera" right={<Chip tone={!known ? "slate" : sim ? "amber" : "green"}>{!known ? "connecting…" : sim ? "simulator" : "live camera"}</Chip>}>
+    <Card title={title} right={<Chip tone={!known ? "slate" : sim ? "amber" : "green"}>{!known ? "connecting…" : sim ? "simulator" : "live camera"}</Chip>}>
       <div className="flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-black">
         {frame ? <img alt="driver" className="h-full w-full object-cover" src={`data:image/jpeg;base64,${frame}`} />
           : <span className="px-6 text-center text-sm text-slate-500">

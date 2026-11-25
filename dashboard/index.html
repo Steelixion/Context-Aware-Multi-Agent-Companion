@@ -1,12 +1,568 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Driver Companion</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Driver Companion</title>
+<style>
+:root{
+  --bg:#05070a; --ink:#eef3f7; --dim:rgba(238,243,247,.55); --faint:rgba(238,243,247,.14);
+  --accent:#7fd8e6; --accent2:#5b8cff; --warn:#ff8a5c; --ok:#8affc1;
+  --glass:rgba(255,255,255,.06); --glass-b:rgba(255,255,255,.12);
+  --ease:cubic-bezier(.22,.8,.24,1);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--ink);
+  font:400 20px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;user-select:none}
+#app{position:fixed;inset:0;
+  background:radial-gradient(120% 80% at 50% 38%,#0e1620 0%,#070a0f 55%,#030406 100%)}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:28px;padding:5vh 5vw;opacity:0;visibility:hidden;transform:scale(.985);
+  transition:opacity .45s var(--ease),transform .45s var(--ease),visibility 0s .45s}
+#app[data-screen="1"] #s1,#app[data-screen="2"] #s2,#app[data-screen="3"] #s3{
+  opacity:1;visibility:visible;transform:none;transition-delay:0s}
+.msg{font-size:clamp(22px,3.2vw,34px);font-weight:500;letter-spacing:.01em;text-align:center;max-width:22ch;min-height:2.7em}
+.sub{font-size:clamp(15px,1.8vw,19px);color:var(--dim);text-align:center}
+.pill{display:inline-flex;align-items:center;justify-content:center;min-height:56px;padding:0 30px;border-radius:999px;
+  color:var(--ink);font:500 18px/1 inherit;letter-spacing:.04em;background:var(--glass);
+  border:1px solid var(--glass-b);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);cursor:pointer;
+  transition:transform .15s var(--ease),opacity .2s}
+.pill:active,.round:active{transform:scale(.94)}
+button{font:inherit;color:inherit}
+
+/* ---------- Screen 1 ---------- */
+.guide{position:relative;width:min(60vw,62vh);max-width:560px;aspect-ratio:4/3;border-radius:28px;overflow:hidden;
+  border:1px solid var(--glass-b);background:#080c11}
+.guide::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 80px rgba(0,0,0,.55);pointer-events:none}
+.guide svg{position:absolute;inset:0;width:100%;height:100%;z-index:1}
+.guide .dash{fill:none;stroke:rgba(255,255,255,.65);stroke-width:2.5;stroke-dasharray:3 11;stroke-linecap:round;transition:stroke .4s}
+#app[data-aligned="1"] .guide .dash{stroke:var(--ok)}
+.guide .lock{position:absolute;inset:0;border-radius:inherit;opacity:0;transition:opacity .5s;z-index:1;
+  box-shadow:0 0 70px rgba(138,255,193,.28) inset}
+#app[data-aligned="1"] .guide .lock{opacity:1}
+.slot{position:absolute;inset:0}
+/* live camera element: one node, moved between screen 1 and 2 */
+.cam{position:absolute;inset:0;border-radius:inherit;overflow:hidden;background:#0a0f15}
+.cam video,.cam img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .4s}
+.cam video{transform:scaleX(-1)}
+.cam.vid video,.cam.img img{opacity:1}
+.cam .failmsg{position:absolute;inset:0;display:grid;place-items:center;font-size:16px;color:var(--dim);opacity:0}
+.cam.fail .failmsg{opacity:1}
+.cam.fake{background:radial-gradient(circle at 50% 40%,#2b3a4b 0 17%,transparent 17.5%),
+  radial-gradient(ellipse 34% 28% at 50% 100%,#233140 0 100%,transparent 100%),#0a0f15}#app[data-aligned="1"] .guide .lock{opacity:1}
+.chips{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+.chip{padding:9px 18px;border-radius:999px;font-size:15px;letter-spacing:.05em;color:var(--dim);
+  border:1px solid var(--faint);opacity:.55;transition:opacity .3s,color .3s,border-color .3s}
+.chip.on{opacity:1;color:var(--ok);border-color:rgba(138,255,193,.5)}
+
+/* ---------- Screen 2 ---------- */
+.ring{position:relative;width:min(40vh,330px);aspect-ratio:1}
+.ring svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:5;stroke-linecap:round}
+.ring .track{stroke:var(--faint)}
+.ring .bar{stroke:var(--accent);stroke-dasharray:100;stroke-dashoffset:100;transition:stroke-dashoffset .35s linear}
+.camcircle{position:absolute;inset:7%;border-radius:50%;overflow:hidden}
+
+/* ---------- Screen 3 ---------- */
+.bar-top{position:absolute;top:0;left:0;right:0;height:56px;padding:0 28px;display:flex;align-items:center;justify-content:space-between}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--ok);opacity:.75;animation:breathe 3s ease-in-out infinite}
+#app[data-state="alert"] .dot{background:var(--warn)}
+.gear{width:48px;height:48px;border:0;background:none;display:grid;place-items:center;cursor:pointer;opacity:.7}
+.gear svg,.round svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tools{display:flex;gap:6px}
+#status{max-width:34ch;font-weight:400;transition:opacity .25s}
+#status:empty{opacity:0}
+.demo-tag{position:absolute;left:24px;bottom:28px;min-height:44px;padding:0 20px;font-size:15px;z-index:12;opacity:0;visibility:hidden;transition:opacity .3s,visibility 0s .3s}
+.demo-tag.show{opacity:1;visibility:visible;transition-delay:0s}
+.banner{position:absolute;top:68px;left:50%;margin-left:-190px;width:380px;max-width:90vw;padding:14px 22px;border-radius:999px;
+  text-align:center;font-weight:600;letter-spacing:.03em;background:rgba(255,138,92,.16);border:1px solid rgba(255,138,92,.6);
+  color:#ffd2bf;opacity:0;transform:translateY(-14px);transition:opacity .3s,transform .3s var(--ease);pointer-events:none}
+#app[data-state="alert"] .banner{opacity:1;transform:none}
+
+.orb{position:relative;width:min(36vh,300px);aspect-ratio:1}
+.orb>*{position:absolute;inset:0;border-radius:50%;will-change:transform,opacity}
+.o-glow{background:radial-gradient(circle,rgba(127,216,230,.35) 0%,rgba(91,140,255,.12) 45%,transparent 70%);transform:scale(1.5);opacity:.7}
+.o-core{inset:12%;background:radial-gradient(circle at 36% 32%,#e8fbff 0%,var(--accent) 22%,var(--accent2) 58%,#0c1840 100%);
+  box-shadow:0 0 60px rgba(91,140,255,.35)}
+.o-shade{inset:12%;background:radial-gradient(circle at 66% 72%,rgba(0,0,0,.5),transparent 60%)}
+.o-orbit{inset:12%;opacity:0}
+.o-orbit::before{content:"";position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(circle at 50% 8%,rgba(255,255,255,.9) 0,rgba(255,255,255,0) 22%),
+             radial-gradient(circle at 50% 92%,rgba(127,216,230,.7) 0,rgba(127,216,230,0) 20%)}
+.o-ripple{inset:12%;border:2px solid var(--accent);opacity:0}
+.o-warn{inset:6%;background:radial-gradient(circle,rgba(255,138,92,.55) 0%,rgba(255,80,50,.25) 55%,transparent 72%);opacity:0;transition:opacity .35s}
+.o-core,.o-glow{animation:breathe 5.5s ease-in-out infinite}
+#app[data-state="listening"] .o-ripple{animation:ripple 2.2s ease-out infinite}
+#app[data-state="listening"] .o-ripple.r2{animation-delay:.73s}
+#app[data-state="listening"] .o-ripple.r3{animation-delay:1.46s}
+#app[data-state="thinking"] .o-orbit{opacity:1;animation:spin 2.4s linear infinite}
+#app[data-state="thinking"] .o-core,#app[data-state="thinking"] .o-glow{animation-duration:2.4s}
+#app[data-state="speaking"] .o-core{animation:speak .9s ease-in-out infinite}
+#app[data-state="speaking"] .o-glow{animation:speakGlow .9s ease-in-out infinite}
+#app[data-state="alert"] .o-warn{opacity:1;animation:alert .8s ease-in-out infinite}
+#app[data-state="alert"] .o-core{animation:alertCore .8s ease-in-out infinite}
+#status{min-height:2.7em}
+
+.dock{position:absolute;bottom:max(4vh,28px);left:50%;transform:translateX(-50%);display:flex;gap:28px;padding:12px;
+  border-radius:999px;background:var(--glass);border:1px solid var(--glass-b);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.round{width:76px;height:76px;border-radius:50%;border:1px solid var(--glass-b);background:rgba(255,255,255,.05);
+  display:grid;place-items:center;cursor:pointer;transition:transform .15s var(--ease),background .2s,color .2s}
+.round.active{background:var(--accent);color:#04121a;border-color:transparent}
+
+/* ---------- Settings ---------- */
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(2,4,6,.55);opacity:0;visibility:hidden;
+  transition:opacity .3s,visibility 0s .3s;z-index:10}
+.overlay.open{opacity:1;visibility:visible;transition-delay:0s}
+.panel{width:min(520px,90vw);padding:28px;border-radius:32px;display:flex;flex-direction:column;gap:14px;
+  background:rgba(18,24,32,.72);border:1px solid var(--glass-b);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);
+  transform:translateY(18px) scale(.98);transition:transform .35s var(--ease)}
+.overlay.open .panel{transform:none}
+.panel h2{font-size:20px;font-weight:500;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center}
+.panel .x{width:52px;height:52px;border-radius:50%;border:1px solid var(--glass-b);background:none;display:grid;place-items:center;cursor:pointer}
+.panel .x svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.row{min-height:72px;width:100%;padding:0 24px;border-radius:22px;border:1px solid var(--glass-b);background:rgba(255,255,255,.05);
+  text-align:left;font-size:19px;cursor:pointer;transition:background .2s,border-color .2s,transform .15s}
+.row:active{transform:scale(.985)}
+.row.confirm{background:rgba(255,138,92,.18);border-color:rgba(255,138,92,.7);color:#ffd2bf}
+.row small{display:block;font-size:14px;color:var(--dim);margin-top:2px}
+.toast{position:absolute;bottom:14vh;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:999px;background:var(--glass);
+  border:1px solid var(--glass-b);font-size:15px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:11}
+.toast.show{opacity:1}
+
+/* ---------- Keyframes (transform / opacity only) ---------- */
+@keyframes breathe{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.035);opacity:1}}
+@keyframes ripple{0%{transform:scale(1);opacity:.55}100%{transform:scale(1.55);opacity:0}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes speak{0%,100%{transform:scale(1)}30%{transform:scale(1.06)}60%{transform:scale(.99)}}
+@keyframes speakGlow{0%,100%{transform:scale(1.5);opacity:.6}30%{transform:scale(1.75);opacity:1}}
+@keyframes alert{0%,100%{transform:scale(1);opacity:.55}50%{transform:scale(1.18);opacity:1}}
+@keyframes alertCore{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+
+/* Free the CPU/GPU when nothing is visible */
+.paused *{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){.o-ripple,.o-orbit{animation:none!important}}
+@media (max-height:520px){.guide{width:50vh}.ring{width:32vh}.orb{width:30vh}}
+</style>
+</head>
+<body>
+<div id="app" data-screen="1" data-state="idle" data-aligned="0">
+
+  <!-- Screen 1: Camera alignment -->
+  <section class="screen" id="s1">
+    <div class="guide">
+      <div class="slot" id="slot1">
+        <div class="cam" id="camBox">
+          <video id="camVid" autoplay muted playsinline></video><img id="camImg" alt="">
+          <span class="failmsg">Camera unavailable</span>
+        </div>
+      </div>
+      <svg viewBox="0 0 400 300" aria-hidden="true">
+        <ellipse class="dash" cx="200" cy="116" rx="62" ry="80"/>
+        <path class="dash" d="M50 300 C 60 232,125 206,200 206 C 275 206,340 232,350 300"/>
+      </svg>
+      <div class="lock"></div>
+    </div>
+    <div>
+      <p class="msg" id="alignMsg">Center your face inside the dotted guide</p>
+    </div>
+    <div class="chips">
+      <span class="chip" id="chipFace">Face</span>
+      <span class="chip" id="chipEyes">Eyes &amp; Mouth</span>
+      <span class="chip" id="chipShoulders">Shoulders</span>
+    </div>
+    <button class="pill" id="btnContinue">Skip</button>
+  </section>
+
+  <!-- Screen 2: Baseline calibration -->
+  <section class="screen" id="s2">
+    <div class="ring">
+      <div class="camcircle" id="slot2"></div>
+      <svg viewBox="0 0 120 120" aria-hidden="true">
+        <circle class="track" cx="60" cy="60" r="54"/>
+        <circle class="bar" id="ringBar" cx="60" cy="60" r="54" pathLength="100"/>
+      </svg>
+    </div>
+    <div>
+      <p class="msg" id="calMsg">Hold still for a moment</p>
+      <p class="sub" id="calPct">Setting up… 0%</p>
+    </div>
+    <button class="pill" id="btnRecal">Skip</button>
+  </section>
+
+  <!-- Screen 3: Cockpit -->
+  <section class="screen" id="s3">
+    <div class="bar-top">
+      <span class="dot" title="Monitoring active"></span>
+      <div class="tools">
+      <button class="gear" id="btnMon" aria-label="Open monitoring"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></button>
+      <button class="gear" id="btnGear" aria-label="Settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
+      </div>
+    </div>
+    <div class="banner" id="banner" role="alert">Drowsiness detected — take a break</div>
+
+    <div class="orb" aria-hidden="true">
+      <div class="o-glow"></div>
+      <div class="o-warn"></div>
+      <div class="o-ripple"></div><div class="o-ripple r2"></div><div class="o-ripple r3"></div>
+      <div class="o-core"></div>
+      <div class="o-orbit"></div>
+      <div class="o-shade"></div>
+    </div>
+    <p class="msg" id="status" aria-live="polite"></p>
+
+    <div class="dock">
+      <button class="round" id="btnCancel" aria-label="Cancel or mute">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+  </section>
+
+  <!-- Settings overlay -->
+  <div class="overlay" id="settings" aria-hidden="true">
+    <div class="panel" role="dialog" aria-label="Settings">
+      <h2>Settings
+        <button class="x" id="btnClose" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </h2>
+      <button class="row" id="rowRecal">Recalibrate driver baseline<small>Returns to camera alignment</small></button>
+      <button class="row" id="rowMemory">Remove long-term memory<small>Clears stored driver facts</small></button>
+      <button class="row" id="rowDemo">Preview animations<small>Runs every screen and orb state</small></button>
+    </div>
+  </div>
+  <button class="pill demo-tag" id="demoTag">Preview</button>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+window.CompanionConfig = {
+  monitoringUrl: "/monitoring.html",
+  camera: { mode: "external", url: "" }
+};
+</script>
+
+<script>
+/* =====================================================================
+   BACKEND BRIDGE  — the ONLY section you need to adapt to your stack.
+   ---------------------------------------------------------------------
+   INBOUND  (backend -> UI): dispatch these on `window`, or call
+            Companion.vision / .calibration / .state / .alert directly.
+     CustomEvent('companion:vision',      {detail:{face,eyes,mouth,shoulders,confidence?}})
+     CustomEvent('companion:calibration', {detail:{progress:0..100}})
+     CustomEvent('companion:state',       {detail:{state:'idle|listening|thinking|speaking|alert', text?}})
+     CustomEvent('companion:alert',       {detail:{text?}})     // drowsiness -> alert state
+     CustomEvent('companion:screen',      {detail:{screen:1|2|3}})
+     CustomEvent('companion:transcript',  {detail:{text}})      // live STT text, shown while listening/thinking
+   OUTBOUND (UI -> backend): assign handlers on window.CompanionHooks,
+            each may return a Promise. Every action also fires
+            CustomEvent('companion:action',{detail:{type,...}}).
+     recalibrate() skipCalibration() skipAlignment() calibrationStart()
+     cancelSpeech() dismissAlert() clearMemory()
+     openMonitoring() cameraError()      // monitoring button then navigates to CFG.monitoringUrl
+   CONFIG (define BEFORE this script):
+     window.CompanionConfig = { monitoringUrl:'/monitoring',
+       camera:{ mode:'getUserMedia' | 'mjpeg' | 'external', url:'/video_feed' } }
+     getUserMedia: the UI opens the webcam itself (640x480@15fps) and releases it on the cockpit.
+     mjpeg:        <img src=url> shows your backend's stream (use this if Python/OpenCV owns the camera).
+     external:     call Companion.attachStream(mediaStream) yourself.
+   ===================================================================== */
+window.CompanionHooks = window.CompanionHooks || {};
+
+(function(){
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const app = $('app');
+  const T = { ALIGN_HOLD_MS: 2000, CONFIRM_MS: 4000, VISION_STALE_MS: 1200 };
+  const CFG = Object.assign({ monitoringUrl: '/monitoring' }, window.CompanionConfig);
+  CFG.camera = Object.assign({ mode: 'getUserMedia', url: '/video_feed' }, CFG.camera);
+  const DEMO = /[?&]demo=1/.test(location.search) || location.hash === '#demo' || !!window.__AUTODEMO__;
+  let screen = 1, state = 'idle', calPct = 0;
+  let holdTimer = 0, staleTimer = 0, confirmTimer = 0, toastTimer = 0, calibrating = false;
+
+  /* ---- helpers ---- */
+  function emit(type, extra){
+    window.dispatchEvent(new CustomEvent('companion:action', { detail: Object.assign({ type }, extra) }));
+    const fn = window.CompanionHooks[type];
+    if (typeof fn === 'function') { try { return Promise.resolve(fn(extra && extra.active)); } catch(e){ return Promise.reject(e); } }
+    return Promise.resolve();
+  }
+  function toast(t){
+    const el = $('toast'); el.textContent = t; el.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+  }
+  function setText(el, t){ if (el.textContent !== t) el.textContent = t; }
+
+  /* ---- Camera preview: shown on screens 1-2 only, released on the cockpit ---- */
+  const camBox = $('camBox'), camVid = $('camVid'), camImg = $('camImg');
+  let stream = null;
+  async function camOn(){
+    if (DEMO){ camBox.classList.add('fake'); return; }
+    const c = CFG.camera; camBox.classList.remove('fail');
+    try{
+      if (c.mode === 'mjpeg'){ if (!camImg.getAttribute('src')) camImg.src = c.url; camBox.classList.add('img'); }
+      else if (c.mode === 'getUserMedia'){
+        if (!stream) stream = await navigator.mediaDevices.getUserMedia({ audio:false,
+          video:{ facingMode:'user', width:{ideal:640}, height:{ideal:480}, frameRate:{ideal:15} } });
+        if (camVid.srcObject !== stream) camVid.srcObject = stream;
+        await camVid.play(); camBox.classList.add('vid');
+      } else if (c.mode === 'external'){ camBox.classList.add('img'); }
+    }catch(e){ camBox.classList.add('fail'); emit('cameraError'); }
+  }
+  function camOff(){
+    camBox.classList.remove('img','vid'); camImg.removeAttribute('src');
+    if (CFG.camera.mode === 'getUserMedia'){ if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; camVid.srcObject = null; }
+  }
+  function attachStream(s){ camVid.srcObject = s; camBox.classList.remove('fail'); camBox.classList.add('vid'); camVid.play().catch(()=>{}); }
+  function attachFrame(b64){
+    if (!b64) return;
+    camImg.src = 'data:image/jpeg;base64,' + b64;
+    camBox.classList.remove('fail');
+    camBox.classList.add('img');
+  }
+
+  /* ---- screen routing ---- */
+  function go(n){
+    if (n === screen) return;
+    screen = n; app.dataset.screen = n;
+    clearTimeout(holdTimer); holdTimer = 0;
+    if (n === 1 || n === 2){ $('slot' + n).appendChild(camBox); camOn(); } else camOff();
+    if (n === 1){ app.dataset.aligned = '0'; resetChips(); setText($('alignMsg'), 'Center your face inside the dotted guide'); setText($('btnContinue'), 'Skip'); }
+    if (n === 2){ setText($('calMsg'), 'Hold still for a moment'); calPct = 0; paintCal(); calibrating = true; setText($('btnRecal'), 'Skip'); emit('calibrationStart'); }
+    if (n === 3){ calibrating = false; setState('idle'); }
+  }
+
+  /* ---- Screen 1: vision feedback ---- */
+  const chips = { face: $('chipFace'), eyes: $('chipEyes'), shoulders: $('chipShoulders') };
+  function resetChips(){ for (const k in chips) chips[k].classList.remove('on'); }
+  function vision(d){
+    if (screen === 2){
+      const lost = !d.face || d.eyes === false || d.mouth === false;
+      setText($('calMsg'), lost ? 'Keep your face in view' : 'Hold still for a moment'); return;
+    }
+    if (screen !== 1) return;
+    const face = !!d.face, eyesMouth = !!(d.eyes && d.mouth), shoulders = !!d.shoulders;
+    chips.face.classList.toggle('on', face);
+    chips.eyes.classList.toggle('on', eyesMouth);
+    chips.shoulders.classList.toggle('on', shoulders);
+    let msg;
+    if (d.hint) msg = d.hint;
+    else if (!face) msg = 'Move closer to the camera';
+    else if (d.centered === false) msg = 'Center your face inside the dotted guide';
+    else if (!eyesMouth) msg = 'Ensure eyes and mouth are clearly visible';
+    else if (!shoulders) msg = 'Sit back so your shoulders are in view';
+    else msg = 'Position locked — ready to calibrate';
+    setText($('alignMsg'), msg);
+    const ok = face && eyesMouth && shoulders && d.centered !== false && (d.confidence == null || d.confidence >= 0.6);
+    app.dataset.aligned = ok ? '1' : '0';
+    setText($('btnContinue'), ok ? 'Continue' : 'Skip');
+    if (ok && !holdTimer) holdTimer = setTimeout(() => { holdTimer = 0; go(2); }, T.ALIGN_HOLD_MS);
+    if (!ok && holdTimer){ clearTimeout(holdTimer); holdTimer = 0; }
+    clearTimeout(staleTimer);
+    staleTimer = setTimeout(() => vision({ face:false }), T.VISION_STALE_MS * 4);
+  }
+
+  /* ---- Screen 2: calibration progress ---- */
+  function paintCal(){
+    $('ringBar').style.strokeDashoffset = String(100 - calPct);
+    setText($('calPct'), 'Setting up… ' + Math.round(calPct) + '%');
+  }
+  function calibration(d){
+    if (screen !== 2) return;
+    calPct = Math.max(0, Math.min(100, +d.progress || 0));
+    paintCal();
+    if (calPct >= 100) setTimeout(() => { if (screen === 2) go(3); }, 500);
+  }
+
+  /* ---- Screen 3: orb state ---- */
+  const KNOWN = { idle:1, listening:1, thinking:1, speaking:1, alert:1 };
+  const ALERT_TEXT = 'Drowsiness detected — take a break';
+  let tx = '';
+  function setState(s, text){
+    if (!(s in KNOWN)) return;
+    const prev = state;
+    state = s; app.dataset.state = s;
+    if (s === 'listening'){ if (prev !== 'listening') tx = ''; }
+    else if (s !== 'thinking' && s !== 'speaking') tx = '';
+    if (text != null && (s === 'listening' || s === 'thinking' || s === 'speaking')) tx = text;
+    if (s === 'alert') setText($('banner'), text || ALERT_TEXT);
+    setText($('status'), tx);
+  }
+  function transcript(d){
+    if (state !== 'listening' && state !== 'thinking') return;
+    tx = typeof d === 'string' ? d : (d && d.text) || '';
+    setText($('status'), tx);
+  }
+
+  /* ---- Inbound events ---- */
+  window.addEventListener('companion:vision',      e => vision(e.detail || {}));
+  window.addEventListener('companion:calibration', e => calibration(e.detail || {}));
+  window.addEventListener('companion:state',       e => { const d = e.detail || {}; setState(d.state, d.text); });
+  window.addEventListener('companion:alert',       e => { setState('alert', (e.detail || {}).text); });
+  window.addEventListener('companion:screen',      e => go(+(e.detail || {}).screen));
+  window.addEventListener('companion:transcript',  e => transcript(e.detail));
+
+  /* ---- Outbound: buttons ---- */
+  $('btnContinue').onclick = () => { emit(app.dataset.aligned === '1' ? 'alignmentConfirmed' : 'skipAlignment'); go(2); };
+  $('btnRecal').onclick    = () => {
+    if (calPct > 0 && calPct < 100) { calPct = 0; paintCal(); emit('recalibrate'); setText($('btnRecal'), 'Skip'); }
+    else { emit('skipCalibration'); go(3); }
+  };
+  const _paint = paintCal; paintCal = function(){ _paint(); if (calPct > 0 && calPct < 100) setText($('btnRecal'), 'Recalibrate'); };
+
+  $('btnCancel').onclick = () => {
+    if (state === 'alert') emit('dismissAlert'); else emit('cancelSpeech');
+    setState('idle');
+  };
+  /* ---- Settings ---- */
+  const settings = $('settings');
+  function openSettings(o){ settings.classList.toggle('open', o); settings.setAttribute('aria-hidden', String(!o)); if (!o) disarm(); }
+  $('btnGear').onclick  = () => openSettings(true);
+  $('btnClose').onclick = () => openSettings(false);
+  settings.addEventListener('click', e => { if (e.target === settings) openSettings(false); });
+  $('rowRecal').onclick = () => { emit('recalibrate'); openSettings(false); go(1); };
+  $('btnMon').onclick = () => { emit('openMonitoring'); location.assign(CFG.monitoringUrl); };
+  $('rowDemo').onclick = () => runDemo();
+  $('demoTag').onclick = () => stopDemo();
+
+  const memRow = $('rowMemory');
+  function disarm(){
+    clearTimeout(confirmTimer); memRow.classList.remove('confirm');
+    memRow.firstChild.nodeValue = 'Remove long-term memory';
+    memRow.querySelector('small').textContent = 'Clears stored driver facts';
+  }
+  memRow.onclick = () => {
+    if (!memRow.classList.contains('confirm')){
+      memRow.classList.add('confirm');
+      memRow.firstChild.nodeValue = 'Tap again to confirm';
+      memRow.querySelector('small').textContent = 'This cannot be undone';
+      clearTimeout(confirmTimer); confirmTimer = setTimeout(disarm, T.CONFIRM_MS);
+      return;
+    }
+    disarm();
+    emit('clearMemory').then(() => toast('Memory cleared'), () => toast('Could not clear memory'));
+  };
+
+  /* ---- Idle CPU: pause every animation when the page is hidden ---- */
+  document.addEventListener('visibilitychange', () => app.classList.toggle('paused', document.hidden));
+
+  /* ---- Preview: runs every screen, orb state and the monitoring tab (timeouts only, no rAF) ---- */
+  let demoT = [];
+  function stopDemo(){
+    demoT.forEach(clearTimeout); demoT = [];
+    $('demoTag').classList.remove('show');
+    if (screen === 3) setState('idle');
+  }
+  function runDemo(){
+    stopDemo(); openSettings(false);
+    const tag = $('demoTag'); tag.classList.add('show');
+    let t = 0;
+    const step = (d, fn, label) => { t += d; demoT.push(setTimeout(() => { if (label) tag.textContent = label + '  ·  tap to stop'; fn(); }, t)); };
+    if (screen !== 1) go(1);
+    step(0,    () => vision({ face:false }), 'Screen 1 · alignment');
+    step(1200, () => vision({ face:true, centered:false }));
+    step(1200, () => vision({ face:true, eyes:true, mouth:true, shoulders:false }));
+    step(1200, () => vision({ face:true, eyes:true, mouth:true, shoulders:true, confidence:.9 }));
+    step(2400, () => {}, 'Screen 2 · calibration');
+    for (let i = 1; i <= 20; i++) step(300, () => calibration({ progress: i * 5 }));
+    step(1000, () => {}, 'Orb · idle (breathing)');
+    step(3500, () => setState('listening'), 'Orb · listening (ripples)');
+    step(900,  () => transcript('Navigate to'));
+    step(900,  () => transcript('Navigate to the nearest'));
+    step(900,  () => transcript('Navigate to the nearest coffee shop'));
+    step(1200, () => setState('thinking'), 'Orb · thinking (orbit)');
+    step(3200, () => setState('speaking'), 'Orb · speaking (pulse)');
+    step(4000, () => setState('alert'), 'Orb · alert (banner)');
+    step(4500, () => setState('idle'), 'Orb · idle');
+    step(2500, () => { stopDemo(); if (window.__AUTODEMO__) demoT.push(setTimeout(runDemo, 2500)); });
+  }
+
+  /* ---- Public API ---- */
+  window.Companion = {
+    vision, calibration, state: setState, transcript, attachStream, attachFrame, alert: t => setState('alert', t), go, runDemo, stopDemo,
+    get screen(){ return screen; }
+  };
+  if (DEMO) runDemo();
+  camOn();
+})();
+</script>
+
+<script>
+(function(){
+  'use strict';
+  const api = window.Companion;
+  const hooks = window.CompanionHooks;
+  let sock = null;
+  let lastFrame = 0;
+  let wasAlert = false;
+
+  function send(obj){
+    if (sock && sock.readyState === 1) sock.send(JSON.stringify(obj));
+  }
+  function connect(){
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    sock = new WebSocket(`${proto}://${location.host}/ws`);
+    sock.onmessage = (e) => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+      const type = msg.type;
+      const data = msg.data;
+      if (type === 'snapshot') {
+        const cal = msg.calibration || {};
+        if (cal.stored || cal.profile?.calibrated || cal.state === 'calibrated') api.go(3);
+      } else if (type === 'telemetry' && data) {
+        const face = !!data.face_detected;
+        const usable = face && (data.quality ?? 1) >= 0.35;
+        api.vision({
+          face,
+          eyes: usable && data.ear != null,
+          mouth: usable && data.mar != null,
+          shoulders: !!data.posture?.visible,
+          centered: data.gaze?.on_road !== false && Math.abs(data.head_pose?.yaw || 0) < 25,
+          confidence: data.quality ?? 1
+        });
+        const cal = data.calibration || {};
+        const pct = cal.state === 'calibrating' ? Math.round((cal.progress || 0) * 100)
+          : cal.state === 'calibrated' ? 100 : 0;
+        api.calibration({ progress: pct });
+        const urgent = data.drowsiness_level === 'HIGH' || (data.risk || 0) >= 0.85;
+        if (urgent) { api.alert(data.note || 'Drowsiness detected — take a break'); wasAlert = true; }
+        else if (wasAlert && (data.risk || 0) < 0.5) { api.state('idle'); wasAlert = false; }
+      } else if (type === 'frame_raw') {
+        const now = Date.now();
+        if (api.screen !== 3 && now - lastFrame > 80) { lastFrame = now; api.attachFrame(data); }
+      } else if (type === 'alert' && data) {
+        api.alert(data.text || 'Drowsiness detected — take a break');
+        wasAlert = true;
+      } else if (type === 'calibration' && data && data.state === 'calibrated') {
+        api.calibration({ progress: 100 });
+      } else if (type === 'stt' && data && data.status === 'listening' && !wasAlert) {
+        api.state('listening');
+      } else if (type === 'chat' && data && data.final === false && !wasAlert && api.screen === 3) {
+        api.state('thinking', data.text || '');
+      } else if (type === 'audio' && data && !wasAlert && api.screen === 3) {
+        api.state(data.speaking ? 'speaking' : 'idle', data.text || '');
+      }
+    };
+    sock.onclose = () => setTimeout(connect, 1500);
+  }
+
+  hooks.alignmentConfirmed = () => {};
+  hooks.skipAlignment = () => {};
+  hooks.calibrationStart = () => send({ type: 'calibrate' });
+  hooks.recalibrate = () => send({ type: 'calibrate' });
+  hooks.skipCalibration = () => {};
+  hooks.cancelSpeech = () => {};
+  hooks.dismissAlert = () => { wasAlert = false; };
+  hooks.openMonitoring = () => {};
+  hooks.cameraError = () => {};
+  hooks.clearMemory = async () => {
+    const items = await fetch('/api/memories').then((r) => r.json());
+    await Promise.all(items.map((m) => fetch(`/api/memories/${m.memory_id}`, { method: 'DELETE' })));
+  };
+
+  connect();
+})();
+</script>
+</body>
 </html>

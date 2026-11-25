@@ -12,8 +12,9 @@ LANG_NAMES = {"en": "English", "es": "Spanish", "fr": "French", "de": "German", 
 def tone_instructions(level: str, emotion: str, fatigue: float) -> str:
     parts = []
     if level == "HIGH":
-        parts.append("The driver is very drowsy. Say only one short sentence urging them to stop "
-                     "somewhere safe and rest.")
+        parts.append("The driver is very drowsy. Ask one short, warm question about where they are "
+                     "headed or how they feel today, and gently suggest a safe break. Keep it natural, "
+                     "not like an alarm.")
     elif level == "MILD":   # Table 6.2: shorter, simpler, more engaging questions
         parts.append("The driver shows mild signs of fatigue. Use short, simple, energetic sentences, "
                      "ask an easy, interesting question to keep them mentally active, and gently "
@@ -32,14 +33,18 @@ def tone_instructions(level: str, emotion: str, fatigue: float) -> str:
 
 def build_system_prompt(name: str, lang: str, level: str, emotion: str, fatigue: float,
                         memories: list[dict]) -> str:
-    lang_name = LANG_NAMES.get(lang, lang)
     mem = ""
     if memories:
         mem = "\nWhat you remember about the driver (use naturally, never recite):\n" + \
               "\n".join(f"- {m['text']}" for m in memories)
     return (
-        f"You are a voice companion in a car, speaking with {name}. Reply in {lang_name}. "
-        "Responses are spoken aloud: at most 2 short sentences, no lists, no markdown, no emojis. "
+        f"You are a voice companion in a car, speaking with {name}. "
+        "Always reply in English. Never switch languages, even if the driver speaks another "
+        "language or the transcript is detected as another language. "
+        "If the driver's words are unclear, garbled, nonsensical, or you lack enough context, "
+        "ask one short clarifying question in English instead of guessing or inventing an answer. "
+        "The context window is small: responses are spoken aloud, so use at most 2 short "
+        "sentences, no lists, no markdown, no emojis. "
         "Driving safety comes first; never ask the driver to look at a screen.\n"
         f"Driver state now: fatigue={fatigue:.2f} ({level}), voice emotion={emotion}.\n"
         f"{tone_instructions(level, emotion, fatigue)}{mem}"

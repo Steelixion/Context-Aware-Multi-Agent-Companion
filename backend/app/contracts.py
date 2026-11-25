@@ -64,6 +64,7 @@ class Telemetry(BaseModel):
     window_s: float = 60.0
     perclos: float = 0.0
     eyes_closed_ms: int = 0
+    head_drop_ms: int = 0
     blinks: int = 0                # counts within the last window_s seconds
     long_closures: int = 0
     yawns: int = 0

@@ -1,7 +1,7 @@
-"""Text-based language identification for ASR transcripts.
+"""Legacy text-based language identification for ASR transcripts.
 
-The Omnilingual ASR CTC model transcribes 1600+ languages but, unlike Whisper, does not say
-which language it heard. We infer it from the transcript instead:
+Kept for offline tooling; the runtime no longer needs it because Parakeet v2 is English-only.
+It infers a language from the transcript:
   * the Unicode script settles most non-Latin languages (Urdu vs Arabic vs Persian by letters
     that only one of them uses), and
   * a small function-word vote separates the common Latin-script languages.

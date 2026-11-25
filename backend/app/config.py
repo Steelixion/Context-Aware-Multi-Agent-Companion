@@ -36,10 +36,11 @@ def _discover_voices() -> str:
 
 
 def _discover_asr() -> str:
-    """First sherpa-onnx ASR model dir (tokens.txt + a .onnx) in models/stt, omnilingual first."""
+    """First sherpa-onnx Parakeet TDT model dir (encoder/decoder/joiner/tokens) in models/stt."""
+    needed = ("encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt")
     dirs = [d for d in (MODELS / "stt").glob("*")
-            if d.is_dir() and (d / "tokens.txt").is_file() and any(d.glob("*.onnx"))]
-    dirs.sort(key=lambda d: ("omnilingual" not in d.name, d.name))
+            if d.is_dir() and all((d / name).is_file() for name in needed)]
+    dirs.sort(key=lambda d: d.name)
     return str(dirs[0]) if dirs else ""
 
 
@@ -65,21 +66,22 @@ class Config:
     # --- vision: calibration and personalised thresholds (Implementation ch. 6.2) ---
     calibration_seconds: float = field(default_factory=lambda: _env("CALIBRATION_SECONDS", 10.0, float))
     calibration_timeout: float = 60.0      # give up if this long passes without enough usable frames
-    ear_kappa: float = 0.70                # tau_EAR = kappa * EAR_base          (6.3)
-    mar_delta: float = 0.40                # tau_MAR = MAR_base + delta_m        (6.4)
+    ear_kappa: float = 0.80                # tau_EAR = kappa * EAR_base          (6.3)
+    mar_delta: float = 0.25                # tau_MAR = MAR_base + delta_m        (6.4)
 
     # --- vision: events (6.3) ---
     perclos_seconds: float = 60.0          # PERCLOS / event-counter window      (6.15)
     blink_max_seconds: float = 0.5         # shorter closures are ordinary blinks
     long_closure_seconds: float = 1.5      # longer closures are safety events (microsleep)
-    yawn_seconds: float = field(default_factory=lambda: _env("YAWN_SECONDS", 3.0, float))
-    head_drop_degrees: float = 20.0        # downward pitch below the baseline ...
-    head_drop_seconds: float = 1.5         # ... held this long is a head drop
-    gaze_tolerance: float = 0.15           # |g_h| road-attentive bound          (6.11)
-    yaw_tolerance: float = 20.0            # |yaw| road-attentive bound (degrees)
-    distraction_seconds: float = field(default_factory=lambda: _env("DISTRACTION_SECONDS", 2.0, float))
-    posture_tolerances: tuple = (10.0, 0.20, 0.25)  # tau_theta (deg), tau_lambda, tau_delta (6.14)
-    posture_seconds: float = 5.0           # D_t > 1 this long = posture instability
+    yawn_seconds: float = field(default_factory=lambda: _env("YAWN_SECONDS", 1.2, float))
+    head_drop_degrees: float = 15.0        # downward pitch below the baseline ...
+    head_drop_seconds: float = 1.0         # ... held this long is a head drop
+    gaze_tolerance: float = 0.10           # |g_h| road-attentive bound          (6.11)
+    gaze_v_tolerance: float = 0.20         # |g_v| road-attentive bound
+    yaw_tolerance: float = 15.0            # |yaw| road-attentive bound (degrees)
+    distraction_seconds: float = field(default_factory=lambda: _env("DISTRACTION_SECONDS", 1.2, float))
+    posture_tolerances: tuple = (8.0, 0.15, 0.20)  # tau_theta (deg), tau_lambda, tau_delta (6.14)
+    posture_seconds: float = 2.5           # D_t > 1 this long = posture instability
     quality_seconds: float = 2.0           # telemetry quality = share of usable frames over this span
     quality_min: float = 0.5               # below this, no drowsiness alerts (no false alarms)
 
@@ -94,9 +96,9 @@ class Config:
     warning_repeat_seconds: float = 6.0
     chat_mute_seconds: float = 10.0        # chat stays muted this long after a safety warning
     mild_checkin_seconds: float = 20.0     # MILD this long -> companion check-in  (Table 6.2)
-    mild_checkin_cooldown: float = 120.0   # ... then no check-in for this long
-    distraction_cooldown: float = 15.0
-    posture_cooldown: float = 120.0
+    mild_checkin_cooldown: float = 60.0    # ... then no check-in for this long
+    distraction_cooldown: float = 10.0
+    posture_cooldown: float = 60.0
 
     # --- LLM (llama.cpp server, OpenAI-compatible) ---
     llm_url: str = field(default_factory=lambda: _env("LLM_URL", "http://127.0.0.1:8080/v1"))
@@ -106,7 +108,7 @@ class Config:
     enable_mic: bool = field(default_factory=lambda: _env("ENABLE_MIC", False, _bool))
     enable_speaker: bool = field(default_factory=lambda: _env("ENABLE_SPEAKER", True, _bool))
     asr_model_dir: str = field(default_factory=lambda: _env("ASR_MODEL_DIR", _discover_asr()))
-    asr_threads: int = field(default_factory=lambda: _env("ASR_THREADS", 4, int))
+    asr_threads: int = field(default_factory=lambda: _env("ASR_THREADS", 2, int))
     vad_model: str = field(default_factory=lambda: _env(
         "VAD_MODEL", _first(MODELS / "vad" / "silero_vad_v5.onnx", MODELS / "vad" / "silero_vad.onnx")))
     vad_threshold: float = field(default_factory=lambda: _env("VAD_THRESHOLD", 0.5, float))

@@ -13,7 +13,7 @@ soundfile
 sounddevice
 pyttsx3
 piper-tts
-sherpa-onnx>=2.0.0     # speech-to-text (Omnilingual ASR) and VAD (Silero), CPU
+sherpa-onnx>=2.0.0     # speech-to-text (Parakeet TDT int8) and VAD (Silero), CPU
 mediapipe>=1.2         # Face + Pose Landmarker; brings opencv-contrib-python
 onnxruntime            # trained TCN (DC_TEMPORAL_MODEL); also used by piper-tts
 

@@ -22,16 +22,16 @@ needs_vision = pytest.mark.skipif(
 SR = 16000
 # reference transcripts of the model's sample WAVs (lowercase, no punctuation, like the model output)
 REFERENCES = {
-    "en": "ask not what your country can do for you ask what you can do for your country",
-    "de": "alles hat ein ende nur die wurst hat zwei",
-    "fr": "ne vous demandez pas ce que votre pays peut faire pour vous "
-          "demandez-vous plutôt ce que vous pouvez faire pour lui",
-    "es": "no preguntes qué puede hacer tu país por ti pregunta qué puedes hacer tú por tu país",
+    "en": "well i dont wish to see it any more observed phebe turning away her eyes "
+          "it is certainly very like the old portrait",
 }
 
 
+
 def cer(hyp: str, ref: str) -> float:
-    """Character error rate (Levenshtein distance / reference length)."""
+    """Character error rate after lowercasing and dropping punctuation."""
+    norm = lambda s: "".join(c.lower() for c in s if c.isalnum() or c.isspace())
+    hyp, ref = norm(hyp), norm(ref)
     prev = list(range(len(ref) + 1))
     for i, h in enumerate(hyp, 1):
         cur = [i]
@@ -43,7 +43,8 @@ def cer(hyp: str, ref: str) -> float:
 
 def load_wav(lang: str) -> tuple[np.ndarray, int]:
     import soundfile as sf
-    audio, sr = sf.read(str(Path(MODEL_DIR) / "test_wavs" / f"{lang}.wav"), dtype="float32", always_2d=True)
+    name = "0.wav" if lang == "en" else f"{lang}.wav"
+    audio, sr = sf.read(str(Path(MODEL_DIR) / "test_wavs" / name), dtype="float32", always_2d=True)
     return audio[:, 0], sr
 
 

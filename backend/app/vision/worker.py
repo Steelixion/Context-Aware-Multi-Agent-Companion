@@ -3,8 +3,9 @@
 Pipeline: source (camera | video file | simulator) -> landmarks (MediaPipe) -> per-frame
 features -> DriverMonitor (calibration, events, PERCLOS, temporal model, risk) -> telemetry.
 
-Queues: out_q telemetry (latest wins), prev_q JPEG previews (latest wins), ctrl_q commands in
-({"type": "sim"|"calibrate"}), evt_q events out ({"type": "calibration", ...}).
+Queues: out_q telemetry (latest wins), prev_q annotated JPEG previews (latest wins), raw_q raw
+JPEG previews (latest wins), ctrl_q commands in ({"type": "sim"|"calibrate"}), evt_q events out
+({"type": "calibration", ...}).
 """
 from __future__ import annotations
 
@@ -16,11 +17,17 @@ import time
 from types import MappingProxyType
 
 from .calibration import Profile
-from .features import FrameFeatures, HeadPose, extract
+from .features import (EYE_L, EYE_R, GAZE_L, GAZE_R, MOUTH, NOSE, PNP_IDX, SHOULDER_L,
+                       SHOULDER_R, FrameFeatures, HeadPose, extract)
 from .monitor import DriverMonitor
 
 SIM_MODES = ("normal", "drowsy", "yawning", "nodding", "distracted", "slouching", "no_face")
 PREVIEW_EVERY, PREVIEW_WIDTH = 3, 320
+POSE_LIMBS = ((0, 1), (1, 2), (2, 3), (3, 7), (1, 4), (4, 5), (5, 6), (6, 8), (9, 10),
+              (11, 12), (11, 13), (13, 15), (15, 17), (15, 19), (15, 21), (17, 19),
+              (12, 14), (14, 16), (16, 18), (16, 20), (18, 20), (11, 23), (12, 24),
+              (23, 24), (23, 25), (24, 26), (25, 27), (26, 28), (27, 29), (29, 31),
+              (27, 31), (28, 30), (30, 32), (28, 32))
 
 
 def put_latest(q, item) -> None:
@@ -201,21 +208,61 @@ class CameraSource:
         self.face, self.pose = lm.face, lm.pose
         return extract(lm.face, lm.pose, w, h, self.head, lm.rotation), frame
 
-    def preview(self, frame) -> str | None:
-        """Small mirrored (selfie-view) JPEG with the tracked points drawn on it."""
+    def _encode(self, img) -> str | None:
         cv2 = self.cv2
-        img = frame.copy()
-        if self.face is not None:
-            for i in (33, 160, 158, 133, 153, 144, 362, 385, 387, 263, 373, 380, 78, 308, 13, 14, 468, 473):
-                cv2.circle(img, (int(self.face[i][0]), int(self.face[i][1])), 2, (80, 220, 120), -1)
-        if self.pose is not None and min(self.pose[11][3], self.pose[12][3]) >= 0.5:
-            a, b = self.pose[11], self.pose[12]
-            cv2.line(img, (int(a[0]), int(a[1])), (int(b[0]), int(b[1])), (240, 180, 60), 2)
         img = cv2.flip(img, 1)
         h, w = img.shape[:2]
         img = cv2.resize(img, (PREVIEW_WIDTH, int(h * PREVIEW_WIDTH / w)))
         ok, jpg = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 60])
         return base64.b64encode(jpg.tobytes()).decode() if ok else None
+
+    def preview_raw(self, frame) -> str | None:
+        """Small mirrored (selfie-view) JPEG of the untouched camera frame."""
+        return self._encode(frame)
+
+    def preview(self, frame) -> str | None:
+        """Small mirrored JPEG with all face/pose landmarks and the measured regions marked."""
+        cv2, img = self.cv2, frame.copy()
+        if self.face is not None:
+            face = self.face
+            for p in face:
+                cv2.circle(img, (int(p[0]), int(p[1])), 1, (45, 150, 80), -1)
+            for indices, color in ((EYE_R, (0, 220, 255)), (EYE_L, (0, 220, 255)),
+                                   (MOUTH, (255, 80, 180)), (PNP_IDX, (80, 120, 255))):
+                for i in indices:
+                    cv2.circle(img, (int(face[i][0]), int(face[i][1])), 3, color, -1)
+            for i in range(468, min(len(face), 478)):
+                cv2.circle(img, (int(face[i][0]), int(face[i][1])), 2, (0, 165, 255), -1)
+            for iris, corner in ((GAZE_R[4], GAZE_R[0]), (GAZE_R[4], GAZE_R[1]),
+                                 (GAZE_L[4], GAZE_L[0]), (GAZE_L[4], GAZE_L[1])):
+                cv2.line(img, (int(face[iris][0]), int(face[iris][1])),
+                         (int(face[corner][0]), int(face[corner][1])), (0, 200, 255), 1)
+            cv2.line(img, (int(face[33][0]), int(face[33][1])),
+                     (int(face[263][0]), int(face[263][1])), (0, 0, 255), 2)
+            cv2.line(img, (int(face[1][0]), int(face[1][1])),
+                     (int(face[152][0]), int(face[152][1])), (0, 0, 255), 2)
+            cv2.putText(img, "EAR", (int(face[33][0]), int(face[33][1]) - 8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 220, 255), 1)
+            cv2.putText(img, "GAZE", (int(face[468][0]), int(face[468][1]) - 8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 200, 255), 1)
+            cv2.putText(img, "HEAD", (int(face[1][0]), int(face[1][1]) - 8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+            cv2.putText(img, "MAR", (int(face[13][0]), int(face[13][1]) + 14),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 80, 180), 1)
+        if self.pose is not None:
+            pose = self.pose
+            for a, b in POSE_LIMBS:
+                if pose[a][3] >= 0.5 and pose[b][3] >= 0.5:
+                    cv2.line(img, (int(pose[a][0]), int(pose[a][1])),
+                             (int(pose[b][0]), int(pose[b][1])), (240, 180, 60), 2)
+            for i, p in enumerate(pose):
+                color = (0, 220, 255) if p[3] >= 0.5 else (80, 80, 80)
+                radius = 4 if i in (NOSE, SHOULDER_L, SHOULDER_R) else 2
+                cv2.circle(img, (int(p[0]), int(p[1])), radius, color, -1)
+            if min(pose[SHOULDER_L][3], pose[SHOULDER_R][3]) >= 0.5:
+                cv2.putText(img, "POSTURE", (int(pose[NOSE][0]), int(pose[NOSE][1]) - 14),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (240, 180, 60), 1)
+        return self._encode(img)
 
     def close(self) -> None:
         self.reader.close()
@@ -232,7 +279,7 @@ def _drain(ctrl_q) -> list[dict]:
         return cmds
 
 
-def main(out_q, prev_q, ctrl_q, evt_q, cfg: dict) -> None:
+def main(out_q, prev_q, ctrl_q, evt_q, cfg: dict, raw_q=None) -> None:
     mode, note = cfg["vision_mode"], ""
     source = None
     if mode == "camera":
@@ -245,8 +292,12 @@ def main(out_q, prev_q, ctrl_q, evt_q, cfg: dict) -> None:
         source = SimSource()
         if mode == "camera":          # camera requested but broken: report "no face", never fake data
             source.set_mode("no_face")
-    monitor = DriverMonitor(cfg, Profile.from_dict(cfg.get("profile")))
-    monitor.start_calibration(time.monotonic())
+    profile = Profile.from_dict(cfg.get("profile"))
+    monitor = DriverMonitor(cfg, profile)
+    if profile.calibrated:
+        print("[vision] using stored driver profile", flush=True)
+    else:
+        monitor.start_calibration(time.monotonic())
     print(f"[vision] running: source={source.name}, temporal model={monitor.model.name}, "
           f"profile={'stored' if monitor.profile.calibrated else 'default'}", flush=True)
     period, n = 1.0 / cfg["vision_fps"], 0
@@ -268,4 +319,8 @@ def main(out_q, prev_q, ctrl_q, evt_q, cfg: dict) -> None:
             jpg = source.preview(frame)
             if jpg:
                 put_latest(prev_q, jpg)
+            if raw_q is not None:
+                raw = source.preview_raw(frame)
+                if raw:
+                    put_latest(raw_q, raw)
         time.sleep(max(0.0, period - (time.monotonic() - t0)))

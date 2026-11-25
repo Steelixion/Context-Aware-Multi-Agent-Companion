@@ -26,7 +26,7 @@ MODELS = ROOT / "models"
 GH = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/"
 MP = "https://storage.googleapis.com/mediapipe-models/"
 MPA = "https://storage.googleapis.com/mediapipe-assets/"
-STT_NAME = "sherpa-onnx-omnilingual-asr-1600-languages-300M-ctc-v2-int8-2026-02-05"
+STT_NAME = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8"
 
 # group -> [(url, destination relative to models/, sha256)]
 FILES = {
@@ -48,10 +48,10 @@ FILES = {
          "c8a830ed683c0276d713dd5aeda28f415f10cd6291972084a40d0d8b934ed62b"),
     ],
 }
-# the speech-to-text model is an archive; its extracted files are what gets verified
+# the speech-to-text model is an archive; its checksum is pinned by the sherpa-onnx release
 STT_ARCHIVE = GH + STT_NAME + ".tar.bz2"
-STT_FILES = {"model.int8.onnx": "e3042b2f3b3ef0af2211bf99d2b4bf94a21f5ac0e9898827e7dd6d003a860e91",
-             "tokens.txt": "7d99997ef207ff14c2cfe825f2aa037528ea250113cc3c6392bfe49326884ba6"}
+STT_ARCHIVE_SHA256 = "6fc4426b54aa549a0019b8a75b8dea59164e71790a37ac56a045ad57f915f714"
+STT_FILES = ("encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt")
 
 
 def set_models_dir(path: Path) -> None:
@@ -127,26 +127,41 @@ def safe_extract(archive: Path, target: Path) -> None:
         tar.extractall(target)
 
 
+def remove_omnilingual() -> None:
+    root = MODELS / "stt"
+    if not root.is_dir():
+        return
+    for d in root.iterdir():
+        if d.is_dir() and "omnilingual" in d.name.lower() and d.name != STT_NAME:
+            shutil.rmtree(d)
+            print(f"removed   {d.relative_to(MODELS)}")
+
+
 def get_stt() -> bool:
     model_dir = MODELS / "stt" / STT_NAME
-    if all((model_dir / n).is_file() and sha256(model_dir / n) == d for n, d in STT_FILES.items()):
+    if all((model_dir / name).is_file() for name in STT_FILES):
         print(f"ok        stt/{STT_NAME}")
+        remove_omnilingual()
         return True
-    print(f"download  stt/{STT_NAME} (~290 MB)")
+    print(f"download  stt/{STT_NAME} (~460 MB)")
     with tempfile.TemporaryDirectory(dir=MODELS) as tmp:
         archive = Path(tmp) / "stt.tar.bz2"
         fetch(STT_ARCHIVE, archive)
+        if sha256(archive) != STT_ARCHIVE_SHA256:
+            print("FAILED    stt: archive checksum mismatch")
+            return False
         print("  extracting ...")
         safe_extract(archive, Path(tmp) / "x")
         extracted = Path(tmp) / "x" / STT_NAME
-        bad = [n for n, d in STT_FILES.items() if not (extracted / n).is_file() or sha256(extracted / n) != d]
-        if bad:
-            print(f"FAILED    stt: checksum mismatch for {', '.join(bad)}")
+        missing = [name for name in STT_FILES if not (extracted / name).is_file()]
+        if missing:
+            print(f"FAILED    stt: archive is missing {', '.join(missing)}")
             return False
         if model_dir.exists():
             shutil.rmtree(model_dir)
         model_dir.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(extracted), str(model_dir))
+    remove_omnilingual()
     return True
 
 

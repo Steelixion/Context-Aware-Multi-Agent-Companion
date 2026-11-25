@@ -7,6 +7,7 @@ export function useCompanion() {
   const [tel, setTel] = useState(null);
   const [series, setSeries] = useState([]);
   const [frame, setFrame] = useState(null);
+  const [frameRaw, setFrameRaw] = useState(null);
   const [alert, setAlert] = useState(null);       // {text, severity, until}
   const [alerts, setAlerts] = useState([]);
   const [chat, setChat] = useState([]);
@@ -37,6 +38,7 @@ export function useCompanion() {
           buf.current = [...buf.current.slice(-(HISTORY - 1)), { t: data.ts, ear: data.ear, risk: data.risk, thr: data.calibration?.ear_threshold }];
         }
         else if (type === "frame") setFrame(data);
+        else if (type === "frame_raw") setFrameRaw(data);
         else if (type === "alert") {
           setAlert({ ...data, until: Date.now() + 8000 });
           setAlerts((a) => [data, ...a].slice(0, 20));
@@ -64,7 +66,7 @@ export function useCompanion() {
 
   const send = useCallback((obj) => ws.current?.readyState === 1 && ws.current.send(JSON.stringify(obj)), []);
   return {
-    connected, tel, series, frame, alert, alerts, chat, speaking, sync, info, memTick, stt, calibration, llmOnline,
+    connected, tel, series, frame, frameRaw, alert, alerts, chat, speaking, sync, info, memTick, stt, calibration, llmOnline,
     sendChat: (text, emotion) => send({ type: "chat", text, emotion }),
     setSim: (mode) => send({ type: "sim", mode }),
     calibrate: () => send({ type: "calibrate" }),

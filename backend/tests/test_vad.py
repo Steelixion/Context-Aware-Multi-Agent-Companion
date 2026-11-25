@@ -69,14 +69,14 @@ def test_energy_vad_fails_in_cabin_noise_where_silero_works(silero):
 @needs_model
 @pytest.mark.parametrize("kind,snr_db", [("cabin", 10), ("cabin", 5), ("cabin", 0), ("pink", 10), ("white", 10)])
 def test_finds_every_utterance_in_noise(silero, transcriber, kind, snr_db):
-    langs = ["en", "de", "fr", "es"]
+    langs = ["en"]
     parts, n_rms = [silence(2.0)], 0.03
     for lang in langs:
         parts += [at_rms(speech16k(lang), n_rms * 10 ** (snr_db / 20)), silence(1.5)]
     clean = np.concatenate(parts)
     audio = clean + noise(kind, len(clean) / SR, n_rms)
     segs = run(silero, audio)
-    assert len(segs) == 4
+    assert len(segs) == 1
     for lang, s in zip(langs, segs, strict=True):
         assert cer(transcriber.transcribe(s), REFERENCES[lang]) < (0.2 if snr_db >= 5 else 0.3), lang
 
@@ -84,7 +84,7 @@ def test_finds_every_utterance_in_noise(silero, transcriber, kind, snr_db):
 # --------------------------------------------------------------------------- segmentation behaviour
 @needs_vad
 def test_output_does_not_depend_on_block_size(silero):
-    audio = scene(1.0, speech16k("en"), 1.5, speech16k("fr"), 1.5)
+    audio = scene(1.0, speech16k("en"), 1.5, speech16k("en"), 1.5)
     counts = {b: len(run(SileroSegmenter(VAD_MODEL), audio, b)) for b in (160, 512, 777, 800, 1600, 4000)}
     assert set(counts.values()) == {2}, counts
 
@@ -100,7 +100,7 @@ def test_short_pauses_stay_inside_one_utterance(silero, pause, expected):
 @needs_vad
 @needs_model
 def test_short_word_is_caught(silero, transcriber):
-    word = speech16k("de")[: int(0.6 * SR)]    # "alles"
+    word = speech16k("en")[: int(0.6 * SR)]
     segs = run(silero, scene(1.0, word, 1.5))
     assert len(segs) == 1 and transcriber.transcribe(segs[0])
 
@@ -108,7 +108,7 @@ def test_short_word_is_caught(silero, transcriber):
 @needs_vad
 @needs_model
 def test_long_speech_is_split_without_losing_words(silero, transcriber):
-    langs = ["en", "fr", "en", "fr", "en", "fr", "en"]        # ~31 s of continuous speech
+    langs = ["en"] * 7
     speech = np.concatenate([speech16k(lang) for lang in langs])
     segs = run(silero, scene(1.0, speech, 1.5))
     assert len(segs) >= 2 and all(len(s) / SR <= MAX_UTTERANCE_S * 1.3 for s in segs)

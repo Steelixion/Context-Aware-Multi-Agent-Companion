@@ -17,9 +17,9 @@ flowchart LR
   end
 
   subgraph A["Audio (threads in the orchestrator)"]
-    MIC[Mic 16 kHz] --> VAD[Silero VAD v5] --> ASR[Omnilingual ASR CTC] --> LID[Language ID]
+    MIC[Mic 16 kHz] --> VAD[Silero VAD v5] --> ASR[Parakeet TDT 0.6B v2 int8] --> BUS
     MIC --> SER[Speech emotion]
-    ARB[Audio arbiter<br/>priority + preemption] --> TTS[Piper / pyttsx3] --> SPK[Speaker]
+    ARB[Audio arbiter] --> TTS[Piper / pyttsx3] --> SPK[Speaker]
   end
 
   subgraph O["Orchestrator (asyncio)"]
@@ -41,8 +41,7 @@ flowchart LR
   LID -- transcript + language --> BUS
   SER --> BUS
   BUS --> SAFE & COMP & API
-  SAFE -- preempt --> ARB
-  SAFE -- cancel --> COMP
+  SAFE -- warn --> ARB
   COMP <--> LLM
   COMP -- reply --> ARB
   COMP --> MEM --> VEC
@@ -90,7 +89,7 @@ Why the matrix and not PnP for head pose: against MediaPipe's own fit, 6-point P
 
 Sign conventions: pitch < 0 = head down; yaw > 0 = turned towards the image's right (the driver's left); roll > 0 = clockwise in the image; gaze h > 0 = towards the image's right.
 
-**Calibration** (`calibration.py`). At the start of every session, and on request, the first 10 s of usable neutral frames (face found, |yaw| ≤ 35°, |pitch| ≤ 40°) give per-feature baselines x_base = median and σ = 1.4826 · MAD (6.1-6.2). Thresholds are personal: τ_EAR = 0.70 · EAR_base (6.3), τ_MAR = MAR_base + 0.40 (6.4). Profiles are stored per driver in SQLite and loaded at the next start, so the driver is monitored with their own thresholds from the first frame. A calibration that sees too few usable frames keeps the previous profile.
+**Calibration** (`calibration.py`). When no usable stored profile exists, and on request, the first 10 s of usable neutral frames (face found, |yaw| ≤ 35°, |pitch| ≤ 40°) give per-feature baselines x_base = median and σ = 1.4826 · MAD (6.1-6.2). Thresholds are personal: τ_EAR = 0.80 · EAR_base (6.3), τ_MAR = MAR_base + 0.25 (6.4). Profiles are stored per driver in SQLite and loaded at the next start, so the driver is monitored with their own thresholds from the first frame and startup does not recalibrate. A calibration that sees too few usable frames keeps the previous profile.
 
 **DriverMonitor** (`monitor.py`), every frame:
 
@@ -99,13 +98,13 @@ Sign conventions: pitch < 0 = head down; yaw > 0 = turned towards the image's ri
 | Blink | closure shorter than 0.5 s |
 | Microsleep (long closure) | EAR < τ_EAR continuously for ≥ 1.5 s (one noisy frame tolerated) |
 | PERCLOS | share of usable frames with EAR < τ_EAR over the last 60 s (6.15) |
-| Yawn | MAR > τ_MAR continuously for ≥ 3 s (strictly continuous, so speech never merges into a yawn) |
-| Head drop | pitch ≤ −20° from neutral for ≥ 1.5 s |
-| Eyes off road | \|yaw\| ≥ 20° or \|g_h\| ≥ 0.15 from baseline; distracted after 2 s |
-| Posture instability | D_t = max(\|θ−θ_b\|/10°, \|λ−λ_b\|/0.20, max(0, 1−δ/δ_b)/0.25) > 1 for 5 s (6.14) |
+| Yawn | MAR > τ_MAR for ≥ 1.2 s (brief speech gaps under 0.25 s are tolerated) |
+| Head drop | pitch ≤ −15° from neutral for ≥ 1 s |
+| Eyes off road | \|yaw\| ≥ 15°, \|g_h\| ≥ 0.10, or \|g_v\| ≥ 0.20 from baseline; distracted after 1.2 s |
+| Posture instability | D_t = max(\|θ−θ_b\|/8°, \|λ−λ_b\|/0.15, max(0, 1−δ/δ_b)/0.20) > 1 for 2.5 s (6.14) |
 | Quality | share of frames over 2 s with a tracked face and \|yaw\| ≤ 45°. Steep pitch does not lower it: that is a drowsiness sign, not bad tracking. |
 
-**Temporal estimate and risk.** Every 5 frames, p_t comes from a trained TCN (ONNX Runtime, input `[1, 45, 7]`: ear_norm, mar_rel, pitch, yaw, roll, gaze_h, gaze_v) when `DC_TEMPORAL_MODEL` is set. Otherwise it comes from a noisy-OR heuristic over the 60 s window (PERCLOS anchored at 15 % → 0.5 and 30 % → 0.9, microsleeps, yawns, head drops). Then p̂_t = 0.3 · p_t + 0.7 · p̂_{t−1} (6.16) and R_t = max(p̂_t, r_t), with r_t = 1 during a microsleep or head drop (6.17). While quality is below 0.5, p̂ is held and r_t = 0, so occlusion and head turns cannot raise false alarms.
+**Temporal estimate and risk.** Every 5 frames, p_t comes from a trained TCN (ONNX Runtime, input `[1, 45, 7]`: ear_norm, mar_rel, pitch, yaw, roll, gaze_h, gaze_v) when `DC_TEMPORAL_MODEL` is set. Otherwise it comes from a noisy-OR heuristic over current cues (PERCLOS anchored at 15 % → 0.5 and 30 % → 0.9, current eye closure, current yawn, current head drop), so the level recovers as soon as the cue ends. Then p̂_t = 0.3 · p_t + 0.7 · p̂_{t−1} (6.16) and R_t = max(p̂_t, r_t), with r_t = 1 during a microsleep or head drop (6.17). While quality is below 0.5, p̂ is held and r_t = 0, so occlusion and head turns cannot raise false alarms.
 
 | Level | Risk | Behaviour |
 |---|---|---|
@@ -138,8 +137,8 @@ The schema is `app/contracts.py`. Angles and gaze are relative to the driver's c
 
 1. **Capture.** 16 kHz mono, 50 ms blocks. Each block carries a "muted" flag set in the callback while the companion speaks.
 2. **VAD.** Silero VAD v5 through sherpa-onnx (CPU, about 0.7 % of one core). Utterances end after 0.8 s of silence, so shorter pauses stay inside one utterance. Sounds under 0.25 s are ignored, and speech longer than 20 s is split. Each segment is re-cut with 0.4 s / 0.3 s of context, which measurably lowers the ASR error rate. If the model is missing, an energy VAD takes over; it only works in a quiet room.
-3. **ASR.** Meta Omnilingual ASR 300M CTC v2 int8 through sherpa-onnx, CPU only, 4 threads: about 1.3 s for a 4 s utterance. The output is lowercase without punctuation.
-4. **Language ID** (`language.py`). The model does not report the language, so it is inferred from the transcript: the script settles non-Latin languages (Urdu vs Arabic vs Persian by letters only one of them uses), and a function-word vote decides en/es/fr/de/pt/it/tr. If unsure, the session language is kept.
+3. **ASR.** NVIDIA Parakeet TDT 0.6B v2 int8 through sherpa-onnx, CPU only, 2 threads (configurable to 4 when the LLM is idle). It is English-only and returns punctuation and capitalisation.
+4. **Language.** No language code is passed to the recognizer; the published speech event is labelled `en` for downstream compatibility.
 
 VAD choice, measured on speech mixed into synthetic cabin, pink and white noise from 20 dB down to 0 dB SNR:
 

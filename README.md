@@ -15,13 +15,13 @@ Final year project. The design follows the Implementation chapter of the project
 - A tracking-quality score that suppresses false alarms when the face is turned away or hidden
 
 **Safety Agent** (deterministic, no LLM)
-- High drowsiness: an urgent spoken warning that cuts off the companion and mutes chat
+- High drowsiness: an urgent spoken warning
 - Mild drowsiness: a check-in after 20 s; reminders for distraction, slumped posture and a hidden face
 - A watchdog for a lost camera signal; events logged to SQLite
 
 **Voice companion**
-- Silero VAD v5 and Meta Omnilingual ASR (1600+ languages) on the CPU, via sherpa-onnx
-- The reply language follows the language the driver speaks
+- Silero VAD v5 and NVIDIA Parakeet TDT 0.6B v2 int8 (English) on the CPU, via sherpa-onnx
+- No ASR language setting is needed; Parakeet v2 is English-only
 - A LangGraph agent on a local llama.cpp model; its tone adapts to fatigue level and speech emotion
 - Long-term memory of the driver's facts and preferences (LanceDB)
 - Piper or OS text-to-speech, with safety warnings pre-rendered
@@ -36,20 +36,20 @@ Final year project. The design follows the Implementation chapter of the project
 ```mermaid
 flowchart LR
   CAM[Camera] --> VIS[Vision process<br/>MediaPipe, calibration,<br/>events, risk]
-  MIC[Microphone] --> STT[Silero VAD + Omnilingual ASR]
+  MIC[Microphone] --> STT[Silero VAD + Parakeet TDT]
   VIS -- telemetry --> BUS((Event bus))
   STT -- transcript --> BUS
   BUS --> SAFE[Safety Agent]
   BUS --> COMP[Companion Agent]
   COMP <--> LLM[[llama.cpp]]
   COMP --> MEM[(LanceDB memory)]
-  SAFE -- preempt --> ARB[Audio arbiter] --> TTS[TTS / speaker]
+  SAFE -- warn --> ARB[Audio arbiter] --> TTS[TTS / speaker]
   COMP -- reply --> ARB
   SAFE --> DB[(SQLite)]
   BUS <--> UI[Dashboard]
 ```
 
-Vision runs in its own process, so speech recognition and the LLM can never slow it down. The orchestrator is a single asyncio event loop: speech recognition, text-to-speech and the database run in threads, and the LLM is a separate server. Safety warnings preempt everything through a priority audio queue. The details, including every formula and threshold, are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Vision runs in its own process, so speech recognition and the LLM can never slow it down. The orchestrator is a single asyncio event loop: speech recognition, text-to-speech and the database run in threads, and the LLM is a separate server. Safety warnings are spoken through the audio arbiter. The details, including every formula and threshold, are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Tech stack
 
@@ -57,7 +57,7 @@ Vision runs in its own process, so speech recognition and the LLM can never slow
 |---|---|
 | Backend | Python 3.10+, FastAPI, WebSocket, asyncio |
 | Vision | MediaPipe Tasks (Face Landmarker, Pose Landmarker), OpenCV, NumPy, ONNX Runtime (TCN) |
-| Speech-to-text | sherpa-onnx: Silero VAD v5 + Omnilingual ASR 300M CTC v2 int8 (CPU) |
+| Speech-to-text | sherpa-onnx: Silero VAD v5 + Parakeet TDT 0.6B v2 int8 (CPU) |
 | Text-to-speech | Piper, or pyttsx3 with OS voices |
 | LLM | llama.cpp server (OpenAI-compatible), LangGraph |
 | Storage | SQLite (aiosqlite), LanceDB |
@@ -121,8 +121,8 @@ Measured on an Intel i5-13420H laptop CPU, no GPU:
 ## Limitations
 
 - No trained TCN checkpoint is included; without `DC_TEMPORAL_MODEL` the drowsiness probability comes from the window heuristic.
-- The yawn duration defaults to 3 s. The report specifies 5 s, which misses many real yawns; set `DC_YAWN_SECONDS=5` to match it exactly.
-- Language detection from text covers non-Latin scripts and seven Latin-script languages; others keep the session language.
+- The yawn duration defaults to 1.2 s so ordinary real yawns are detected; set `DC_YAWN_SECONDS=5` to match the report's stricter value.
+- Parakeet v2 is English-only and returns punctuation/capitalisation; number and spelling formatting may differ from other ASR engines.
 - Speech emotion without a model (`DC_SER_MODEL`) is a rough loudness heuristic.
 - Posture monitoring needs both shoulders in the camera's view.
 - Profile sync is upload-only; restoring from the cloud is not implemented.
@@ -131,6 +131,6 @@ Measured on an Intel i5-13420H laptop CPU, no GPU:
 
 | Model | Source | Licence |
 |---|---|---|
-| Omnilingual ASR 300M CTC v2 int8 | Meta, exported by k2-fsa/sherpa-onnx | Apache-2.0 |
+| Parakeet TDT 0.6B v2 int8 | NVIDIA, exported by k2-fsa/sherpa-onnx | CC BY 4.0 (weights), Apache-2.0 (export) |
 | Silero VAD v5 | snakers4/silero-vad, via sherpa-onnx | MIT |
 | Face Landmarker, Pose Landmarker | Google MediaPipe | Apache-2.0 |
