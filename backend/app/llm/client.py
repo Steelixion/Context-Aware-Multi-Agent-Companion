@@ -24,7 +24,7 @@ class LLMClient:
             return False
 
     async def stream(self, messages: list[dict], max_tokens: int = 160,
-                     temperature: float = 0.7) -> AsyncIterator[str]:
+                     temperature: float = 0.4) -> AsyncIterator[str]:
         body = dict(model=self.model, messages=messages, max_tokens=max_tokens,
                     temperature=temperature, stream=True)
         try:

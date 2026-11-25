@@ -1,0 +1,3 @@
+llama serve   -m gemma-4-E2B-it-Q4_0.gguf   -t 4 -c 4096 -np 1 --port 8080 --no-mmproj   --reasoning off   -ngl 0 --device none
+
+in ~/llama.cpp

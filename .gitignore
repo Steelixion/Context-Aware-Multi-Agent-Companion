@@ -28,3 +28,6 @@ Test_Report.xlsx
 .idea/
 .DS_Store
 Thumbs.db
+
+backend/.venv
+backend/.venv311

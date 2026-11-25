@@ -45,12 +45,12 @@ class AudioArbiter:
         if self._task:
             self._task.cancel()
 
-    async def prerender(self, texts: dict[str, str]) -> None:
-        """Cache safety warnings as PCM at startup so warning needs no TTS at alert time."""
+    async def prerender(self, lines: list[tuple[str, str]]) -> None:
+        """Cache safety lines (text, lang) as PCM at startup so alerts need no TTS at alert time."""
         if not self.have_audio:
             return
         loop = asyncio.get_running_loop()
-        for lang, text in texts.items():
+        for text, lang in lines:
             res = await loop.run_in_executor(None, self.tts.synth, text, lang)
             if res:
                 self.cache[(text, lang)] = res

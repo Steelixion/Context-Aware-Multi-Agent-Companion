@@ -55,6 +55,12 @@ def driver_state(t: dict, long_closure_ms: float) -> str:
     return "ATTENTIVE"
 
 
+def all_alert_lines() -> list[tuple[str, str]]:
+    """(text, lang) for every line the Safety Agent can speak, for prerendering."""
+    return [(text, lang) for lang, text in WARNINGS.items()] + [
+        (text, "en") for text in (SENSOR_LOST, FACE_LOST, CHECK_IN, DISTRACTED, POSTURE)]
+
+
 class SafetyAgent:
     def __init__(self, cfg: Config, bus: Bus, session: Session, arbiter: AudioArbiter,
                  db: Database, cancel_companion: Callable[[], None]):

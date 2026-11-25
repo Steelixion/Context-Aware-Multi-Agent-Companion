@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 from .agents.companion import CompanionAgent
 from .agents.memory import MemoryAgent
-from .agents.safety import WARNINGS, SafetyAgent
+from .agents.safety import SafetyAgent, all_alert_lines
 from .audio.arbiter import AudioArbiter
 from .audio.emotion import EmotionClassifier
 from .audio.stt import SpeechListener
@@ -58,7 +58,7 @@ class Runtime:
         self.tts = TTS(cfg.piper_bin, cfg.piper_models)
         self.arbiter = AudioArbiter(self.bus, self.session, self.tts, cfg.enable_speaker, cfg.chat_mute_seconds)
         await self.arbiter.start()
-        await self.arbiter.prerender(WARNINGS)
+        await self.arbiter.prerender(all_alert_lines())
 
         self.companion = CompanionAgent(self.bus, self.session, self.llm, self.store, self.arbiter)
         self.safety = SafetyAgent(cfg, self.bus, self.session, self.arbiter, self.db, self.companion.cancel)
