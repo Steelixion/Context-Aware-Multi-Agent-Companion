@@ -9,6 +9,7 @@ How to set up, run and test the project. Commands are for Windows PowerShell; ma
 - Git
 - Optional: a [llama.cpp](https://github.com/ggml-org/llama.cpp) build and a GGUF model for the companion's replies
 - Optional: a webcam and a microphone (the simulator works without either)
+- Optional: [DVC](https://dvc.org) with Google Drive support, to pull or share the dataset (section 8)
 
 ## 2. One-time setup
 
@@ -191,7 +192,102 @@ Every setting is an environment variable named `DC_<NAME>`.
 | "LLM offline" | start `llama-server` on port 8080 (or set `DC_LLM_URL`) |
 | Port 8000 in use | `$env:DC_PORT = "8001"` |
 
-## 8. macOS / Linux
+DVC errors are listed in section 8.
+
+## 8. Dataset sharing with DVC
+
+The dataset videos are too large for Git, so they are tracked with [DVC](https://dvc.org). Git stores only small `.dvc` pointer files; the videos themselves live in a shared Google Drive folder. Run every `dvc` command from the **repository root**, not from `backend/`.
+
+DVC does not need to be in the backend's requirements. Install it once, either globally (recommended) or in a virtual environment:
+
+```powershell
+pipx install "dvc[gdrive]"
+```
+
+```powershell
+.\backend\.venv\Scripts\pip install "dvc[gdrive]"
+```
+
+Plain `pip install dvc` has no Google Drive support, so keep the `[gdrive]` part.
+
+### 8.1 Get the dataset (teammates)
+
+You need access to the shared Drive folder (ask the owner to share it with your Google account) and the OAuth client ID and secret, which the owner sends you privately. Never commit them.
+
+```powershell
+git pull
+dvc remote modify --local origin gdrive_client_id "<CLIENT_ID>"
+dvc remote modify --local origin gdrive_client_secret "<CLIENT_SECRET>"
+dvc pull Dataset/Testing_Dataset.dvc
+```
+
+The first `dvc pull` opens a browser for Google login. If Google shows an "unverified app" warning, choose **Advanced** and continue. To pull only one dataset, name its `.dvc` file as above; `dvc pull` with no argument pulls everything tracked.
+
+### 8.2 Track and upload the dataset (owner, one time)
+
+Create a Google Cloud project, enable the **Google Drive API**, and create an **OAuth client ID** of type **Desktop app**. Set the app's publishing status to **In production** so logins do not expire after 7 days. Copy the ID of the Drive folder from its URL (`drive.google.com/drive/folders/<FOLDER_ID>`).
+
+```powershell
+dvc init
+git commit -m "Initialize DVC"
+
+dvc add Dataset/Testing_Dataset
+git add Dataset/Testing_Dataset.dvc Dataset/.gitignore
+git commit -m "Track Testing_Dataset with DVC"
+
+dvc remote add -d origin gdrive://<FOLDER_ID>
+dvc remote modify --local origin gdrive_client_id "<CLIENT_ID>"
+dvc remote modify --local origin gdrive_client_secret "<CLIENT_SECRET>"
+git add .dvc/config
+git commit -m "Add DVC remote"
+
+dvc push
+git push
+```
+
+Track each extra folder (for example a separate training set) with its own `dvc add`, so teammates can pull just the part they need. Credentials go in `.dvc/config.local`, which Git ignores.
+
+### 8.3 Update the dataset
+
+After changing files in a tracked folder:
+
+```powershell
+dvc add Dataset/Testing_Dataset
+git add Dataset/Testing_Dataset.dvc
+git commit -m "Update Testing_Dataset"
+dvc push
+git push
+```
+
+Old versions stay in Drive and count against its storage quota, so avoid re-uploading the whole dataset for small changes.
+
+### 8.4 Useful commands
+
+```powershell
+dvc remote list
+dvc status
+dvc status -c
+dvc pull
+dvc push
+```
+
+`dvc status` shows local changes to tracked data; `dvc status -c` compares with the remote.
+
+### 8.5 DVC troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `bad DVC file name '...dvc' is git-ignored` | `git check-ignore -v Dataset/Testing_Dataset.dvc` shows the rule; remove or narrow that line in `.gitignore`, then run `dvc add` again |
+| `extra keys not allowed ... gdrive_client_id` | the Drive plugin is missing or the remote is not a `gdrive://` URL; run `pip install "dvc[gdrive]"` and check `dvc remote list` |
+| `'ascii' codec can't encode character '\u200b'` | an invisible character was copied with the ID or secret; copy it from the downloaded JSON in a plain text editor and paste it again |
+| `module 'lib' has no attribute 'GEN_EMAIL'` | `pyOpenSSL` and `cryptography` versions clash; run `pip install "pyOpenSSL==24.2.1" "cryptography>=41.0.5,<44"` |
+| Asked to log in again every week | the Google app is in "Testing" mode; set its publishing status to "In production" |
+| `dvc push` or `dvc pull` stops partway | Drive rate limits; run the same command again and it resumes |
+| Access or permission error on the Drive folder | the Google account you logged in with does not have access to the shared folder |
+
+The raw dataset may be covered by its provider's licence terms. Check that you are allowed to share it before pushing it to a shared remote.
+
+## 9. macOS / Linux
 
 The same steps with POSIX paths:
 
@@ -200,4 +296,13 @@ python3 scripts/download_models.py --test-assets
 cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt && cd ..
 cd dashboard && npm install && npm run build && cd ..
 cd backend && DC_VISION_MODE=camera DC_ENABLE_MIC=1 .venv/bin/python -m app.main
+```
+
+DVC (from the repository root):
+
+```bash
+pipx install "dvc[gdrive]"
+dvc remote modify --local origin gdrive_client_id '<CLIENT_ID>'
+dvc remote modify --local origin gdrive_client_secret '<CLIENT_SECRET>'
+dvc pull Dataset/Testing_Dataset.dvc
 ```

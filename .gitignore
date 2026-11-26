@@ -32,4 +32,4 @@ Thumbs.db
 backend/.venv
 backend/.venv311
 
-Dataset
+dvc_creds.json
