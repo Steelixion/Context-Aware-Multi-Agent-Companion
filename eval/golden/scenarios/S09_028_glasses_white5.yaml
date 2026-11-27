@@ -1,0 +1,43 @@
+case_id: S09_028_glasses_white5
+scenario: S09
+title: 'Noisy speech: white noise at 5 dB SNR'
+mode: scored
+split: test
+clip:
+  clip_id: 028_glasses
+  start_s: 122.122
+  end_s: 187.122
+calibration:
+  method: prepend_neutral
+  clip_id: 028_glasses
+  start_s: 122.122
+  end_s: 137.122
+  source: same clip (span excluded from scoring)
+timeline:
+- id: e1
+  at_s: 8.0
+  action: speak
+  audio_id: U04_af_heart_s100_white5
+- id: e2
+  at_s: 24.0
+  action: speak
+  audio_id: U01_am_michael_s100_white5
+- id: e3
+  at_s: 40.0
+  action: speak
+  audio_id: U02_bf_emma_s120_white5
+expected:
+- WER within wer_max for this SNR
+- Unclear speech -> a clarification request or no action, not a confident answer to
+  a misheard request
+judge:
+- appropriate_action
+- coherent
+audio:
+  noise_bed:
+    type: white
+    snr_db: 5
+    ref_audio_id: U04_af_heart_s100_clean
+score_exclude:
+- - 0.0
+  - 15.0

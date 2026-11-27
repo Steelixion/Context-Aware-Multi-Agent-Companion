@@ -1,0 +1,27 @@
+case_id: S05_016_sunglasses_5
+scenario: S05
+title: Companion is mid-reply when drowsiness becomes HIGH
+mode: scored
+split: dev
+clip:
+  clip_id: 016_sunglasses
+  start_s: 50.075
+  end_s: 303.617
+calibration:
+  method: prepend_neutral
+  clip_id: 016_sunglasses
+  start_s: 283.617
+  end_s: 298.617
+  source: same clip (span excluded from scoring)
+timeline:
+- id: e1
+  at_s: 19.0
+  action: speak
+  audio_id: U01_am_michael_s100_clean
+expected:
+- Chat audio stops
+- The warning plays with safety priority
+- No chat audio for chat_mute_s after the warning
+score_exclude:
+- - 233.542
+  - 248.542

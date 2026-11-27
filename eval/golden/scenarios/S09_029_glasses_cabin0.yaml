@@ -1,0 +1,43 @@
+case_id: S09_029_glasses_cabin0
+scenario: S09
+title: 'Noisy speech: cabin noise at 0 dB SNR'
+mode: scored
+split: test
+clip:
+  clip_id: 029_glasses
+  start_s: 308.609
+  end_s: 373.609
+calibration:
+  method: prepend_neutral
+  clip_id: 029_glasses
+  start_s: 308.609
+  end_s: 323.609
+  source: same clip (span excluded from scoring)
+timeline:
+- id: e1
+  at_s: 8.0
+  action: speak
+  audio_id: U01_bf_emma_s100_cabin0
+- id: e2
+  at_s: 24.0
+  action: speak
+  audio_id: U02_bm_george_s100_cabin0
+- id: e3
+  at_s: 40.0
+  action: speak
+  audio_id: U03_bm_george_s120_cabin0
+expected:
+- WER within wer_max for this SNR
+- Unclear speech -> a clarification request or no action, not a confident answer to
+  a misheard request
+judge:
+- appropriate_action
+- coherent
+audio:
+  noise_bed:
+    type: cabin
+    snr_db: 0
+    ref_audio_id: U01_bf_emma_s100_clean
+score_exclude:
+- - 0.0
+  - 15.0

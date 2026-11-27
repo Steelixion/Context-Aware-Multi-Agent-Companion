@@ -1,0 +1,43 @@
+case_id: S09_037_glasses_pink5
+scenario: S09
+title: 'Noisy speech: pink noise at 5 dB SNR'
+mode: scored
+split: test
+clip:
+  clip_id: 037_glasses
+  start_s: 137.804
+  end_s: 202.804
+calibration:
+  method: prepend_neutral
+  clip_id: 037_glasses
+  start_s: 137.804
+  end_s: 152.804
+  source: same clip (span excluded from scoring)
+timeline:
+- id: e1
+  at_s: 8.0
+  action: speak
+  audio_id: U04_bf_emma_s100_pink5
+- id: e2
+  at_s: 24.0
+  action: speak
+  audio_id: U01_bm_george_s100_pink5
+- id: e3
+  at_s: 40.0
+  action: speak
+  audio_id: U02_bf_emma_s120_pink5
+expected:
+- WER within wer_max for this SNR
+- Unclear speech -> a clarification request or no action, not a confident answer to
+  a misheard request
+judge:
+- appropriate_action
+- coherent
+audio:
+  noise_bed:
+    type: pink
+    snr_db: 5
+    ref_audio_id: U04_bf_emma_s100_clean
+score_exclude:
+- - 0.0
+  - 15.0

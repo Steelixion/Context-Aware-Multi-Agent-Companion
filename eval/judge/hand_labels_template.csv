@@ -1,0 +1,5 @@
+case_id,rep,question_id,label,notes
+S03_example_case,1,coherent,yes,reply is a fluent on-topic sentence
+S03_example_case,1,grounded,yes,no invented facts
+S10_example_case,1,grounded,no,reply states a tyre pressure value it cannot know
+S08_example_case,1,claims_alert,no,reply still suggests a break

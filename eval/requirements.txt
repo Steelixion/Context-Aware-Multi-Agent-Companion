@@ -1,0 +1,34 @@
+# Evaluation harness only (the app has its own backend/requirements.txt). Python 3.10+ (tested 3.14).
+# Install:  python -m venv eval/.venv ; eval\.venv\Scripts\pip install -r eval/requirements.txt
+
+# core
+numpy==2.5.5
+PyYAML==6.0.4
+openpyxl==3.1.5
+psutil==7.2.2
+pytest==9.2.0
+
+# talking to the app
+websockets==17.4
+httpx==0.29.0
+aiohttp==3.14.5
+
+# inputs: wall-clock virtual camera, audio files
+opencv-python==5.1.0.95
+pyvirtualcam==0.15.0
+soundfile==0.14.0
+
+# speaker loopback capture (true audible onset, echo path)
+SoundCard==0.4.6
+
+# reference speech for the golden dataset (build time only)
+kokoro-onnx==0.4.7
+onnxruntime==1.32.0
+espeakng-loader==0.2.4
+phonemizer-fork==3.3.1
+
+# dataset download (DVC + Google Drive); the two pins avoid the GEN_EMAIL clash (see COMMANDS.md 8.5)
+dvc==3.67.1
+dvc-gdrive==3.0.1
+pyOpenSSL==24.2.1
+cryptography==43.0.3

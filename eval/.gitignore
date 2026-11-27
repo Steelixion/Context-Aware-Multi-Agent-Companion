@@ -1,0 +1,5 @@
+.venv/
+.cache/
+__pycache__/
+.pytest_cache/
+# golden/synthetic/audio is tracked by DVC (golden/synthetic/audio.dvc); DVC adds its own .gitignore there

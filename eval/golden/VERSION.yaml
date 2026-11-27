@@ -1,0 +1,18 @@
+version: 2
+name: NTHU-DDD testing set golden
+builder_version: '1.0'
+built_utc: '2026-11-27T11:40:34+00:00'
+seed: 20261127
+n_dev: 10
+source_dataset: Dataset/Testing_Dataset (DVC md5 in Dataset/Testing_Dataset.dvc)
+tts: kokoro-onnx kokoro-v1.0 (see harness/speech.py for pinned SHA-256)
+smoke_clip: 021_nightnoglasses
+smoke_cases:
+- S10_021_nightnoglasses_3
+- S02_021_nightnoglasses
+- S11_021_nightnoglasses_4
+smoke_max_cases: 3
+clips: 70
+cases: 140
+audio_files: 334
+checksum: b40837945a43c92273be3888e22a215386d4c00823636bf78da361e70cbf3a43

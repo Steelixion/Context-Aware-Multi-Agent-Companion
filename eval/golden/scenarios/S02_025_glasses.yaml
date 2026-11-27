@@ -1,0 +1,24 @@
+case_id: S02_025_glasses
+scenario: S02
+title: Drowsiness onset while silent (whole clip)
+mode: scored
+split: dev
+clip:
+  clip_id: 025_glasses
+  start_s: 0.0
+  end_s: 356.79
+calibration:
+  method: prepend_neutral
+  clip_id: 025_glasses
+  start_s: 216.383
+  end_s: 231.383
+  source: same clip (span excluded from scoring)
+timeline: []
+expected:
+- A spoken warning within warning_latency_s of each labelled drowsy onset
+- No warnings during non-drowsy footage
+judge:
+- claims_alert
+score_exclude:
+- - 216.383
+  - 231.383

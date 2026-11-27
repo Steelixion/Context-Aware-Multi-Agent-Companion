@@ -1,0 +1,22 @@
+case_id: S07_027_nightglasses_3
+scenario: S07
+title: 'MILD state: check-in timing'
+mode: scored
+split: test
+clip:
+  clip_id: 027_nightglasses
+  start_s: 0.01
+  end_s: 117.724
+calibration:
+  method: prepend_neutral
+  clip_id: 027_nightglasses
+  start_s: 77.177
+  end_s: 92.177
+  source: same clip (span excluded from scoring)
+timeline: []
+expected:
+- At most one spoken check-in after MILD has held mild_checkin_after_s
+- No further check-in for mild_checkin_cooldown_s
+score_exclude:
+- - 77.167
+  - 92.167

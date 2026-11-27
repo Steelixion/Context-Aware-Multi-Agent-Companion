@@ -1,0 +1,25 @@
+case_id: S12_027_noglasses_camstop0
+scenario: S12
+title: Camera stops delivering frames
+mode: observe
+split: test
+clip:
+  clip_id: 027_noglasses
+  start_s: 0.0
+  end_s: 40.0
+calibration:
+  method: prepend_neutral
+  clip_id: 027_noglasses
+  start_s: 0.0
+  end_s: 15.0
+  source: same clip (span excluded from scoring)
+timeline:
+- id: s1
+  at_s: 15.0
+  action: stop_video
+expected:
+- 'Observe: what the app reports when the camera feed stops (doc: ''camera signal
+  lost'' at ~3 s)'
+score_exclude:
+- - 0.0
+  - 15.0

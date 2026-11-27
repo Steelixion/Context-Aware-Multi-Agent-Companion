@@ -1,0 +1,18 @@
+case_id: S06_019_nightglasses_2
+scenario: S06
+title: HIGH drowsiness persists
+mode: scored
+split: test
+clip:
+  clip_id: 019_nightglasses
+  start_s: 13.056
+  end_s: 104.104
+calibration:
+  method: prepend_neutral
+  clip_id: 019_glasses
+  start_s: 0.0
+  end_s: 15.0
+  source: 'same subject, other scenario (glasses): appearance may differ'
+timeline: []
+expected:
+- The warning repeats about every warning_repeat_s while HIGH

@@ -1,0 +1,24 @@
+case_id: S12_011_nightglasses_kill2
+scenario: S12
+title: Vision process stops (telemetry stops)
+mode: scored
+split: dev
+clip:
+  clip_id: 011_nightglasses
+  start_s: 277.911
+  end_s: 317.911
+calibration:
+  method: prepend_neutral
+  clip_id: 011_nightglasses
+  start_s: 277.911
+  end_s: 292.911
+  source: same clip (span excluded from scoring)
+timeline:
+- id: k1
+  at_s: 15.0
+  action: kill_vision
+expected:
+- '''Camera signal lost'' warning about watchdog_s after telemetry stops'
+score_exclude:
+- - 0.0
+  - 15.0

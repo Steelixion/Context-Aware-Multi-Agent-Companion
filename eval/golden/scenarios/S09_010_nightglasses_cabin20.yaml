@@ -1,0 +1,43 @@
+case_id: S09_010_nightglasses_cabin20
+scenario: S09
+title: 'Noisy speech: cabin noise at 20 dB SNR'
+mode: scored
+split: test
+clip:
+  clip_id: 010_nightglasses
+  start_s: 360.994
+  end_s: 425.994
+calibration:
+  method: prepend_neutral
+  clip_id: 010_nightglasses
+  start_s: 360.994
+  end_s: 375.994
+  source: same clip (span excluded from scoring)
+timeline:
+- id: e1
+  at_s: 8.0
+  action: speak
+  audio_id: U01_bm_george_s100_cabin20
+- id: e2
+  at_s: 24.0
+  action: speak
+  audio_id: U02_af_heart_s100_cabin20
+- id: e3
+  at_s: 40.0
+  action: speak
+  audio_id: U03_am_michael_s100_cabin20
+expected:
+- WER within wer_max for this SNR
+- Unclear speech -> a clarification request or no action, not a confident answer to
+  a misheard request
+judge:
+- appropriate_action
+- coherent
+audio:
+  noise_bed:
+    type: cabin
+    snr_db: 20
+    ref_audio_id: U01_bm_george_s100_clean
+score_exclude:
+- - 0.0
+  - 15.0

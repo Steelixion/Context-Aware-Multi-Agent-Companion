@@ -1,0 +1,21 @@
+case_id: S01_021_glasses
+scenario: S01
+title: Awake driver, silent, whole clip
+mode: scored
+split: dev
+clip:
+  clip_id: 021_glasses
+  start_s: 0.0
+  end_s: 79.713
+calibration:
+  method: prepend_neutral
+  clip_id: 021_glasses
+  start_s: 0.0
+  end_s: 15.0
+  source: same clip (span excluded from scoring)
+timeline: []
+expected:
+- No drowsiness warning
+score_exclude:
+- - 0.0
+  - 15.0

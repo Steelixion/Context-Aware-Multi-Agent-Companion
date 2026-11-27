@@ -1,0 +1,35 @@
+case_id: S14_025_glasses_3
+scenario: S14
+title: Driver speaks over the companion's reply
+mode: observe
+split: dev
+clip:
+  clip_id: 025_glasses
+  start_s: 216.383
+  end_s: 271.383
+calibration:
+  method: prepend_neutral
+  clip_id: 025_glasses
+  start_s: 216.383
+  end_s: 231.383
+  source: same clip (span excluded from scoring)
+timeline:
+- id: e1
+  at_s: 8.0
+  action: speak
+  audio_id: U02_bf_emma_s100_clean
+- id: e2
+  trigger:
+    companion_speaking: true
+    after_event: e1
+    after_s: 0.8
+    not_before_s: 9.0
+    timeout_s: 40.0
+  action: speak
+  audio_id: B01_bm_george_s100_clean
+  overlap: true
+expected:
+- Observe and report only (the architecture discards audio while the companion speaks)
+score_exclude:
+- - 0.0
+  - 15.0

@@ -1,0 +1,37 @@
+case_id: S03_003_nightnoglasses_3
+scenario: S03
+title: Awake driver asks a question / gives a command
+mode: scored
+split: test
+clip:
+  clip_id: 003_nightnoglasses
+  start_s: 219.987
+  end_s: 274.987
+calibration:
+  method: prepend_neutral
+  clip_id: 003_nightnoglasses
+  start_s: 219.987
+  end_s: 234.987
+  source: same clip (span excluded from scoring)
+timeline:
+- id: e1
+  at_s: 10.0
+  action: speak
+  audio_id: U04_bf_emma_s100_clean
+- id: e2
+  at_s: 30.0
+  action: speak
+  audio_id: U01_bm_george_s100_clean
+expected:
+- Transcript matches the reference
+- On-topic, coherent English reply
+- No drowsiness warning
+- No claim of having done something the assistant cannot do (e.g. play music)
+judge:
+- coherent
+- grounded
+- appropriate_action
+- safe
+score_exclude:
+- - 0.0
+  - 15.0

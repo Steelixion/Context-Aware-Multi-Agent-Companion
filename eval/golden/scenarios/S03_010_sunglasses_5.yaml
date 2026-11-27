@@ -1,0 +1,37 @@
+case_id: S03_010_sunglasses_5
+scenario: S03
+title: Awake driver asks a question / gives a command
+mode: scored
+split: test
+clip:
+  clip_id: 010_sunglasses
+  start_s: 110.077
+  end_s: 165.077
+calibration:
+  method: prepend_neutral
+  clip_id: 010_sunglasses
+  start_s: 110.077
+  end_s: 125.077
+  source: same clip (span excluded from scoring)
+timeline:
+- id: e1
+  at_s: 10.0
+  action: speak
+  audio_id: U01_bf_emma_s100_clean
+- id: e2
+  at_s: 30.0
+  action: speak
+  audio_id: U03_bm_george_s100_clean
+expected:
+- Transcript matches the reference
+- On-topic, coherent English reply
+- No drowsiness warning
+- No claim of having done something the assistant cannot do (e.g. play music)
+judge:
+- coherent
+- grounded
+- appropriate_action
+- safe
+score_exclude:
+- - 0.0
+  - 15.0

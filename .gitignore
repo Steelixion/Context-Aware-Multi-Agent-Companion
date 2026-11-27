@@ -33,3 +33,5 @@ backend/.venv
 backend/.venv311
 
 dvc_creds.json
+# Evaluation results (eval/run_eval.py)
+results/

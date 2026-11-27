@@ -1,0 +1,18 @@
+case_id: S06_014_noglasses_1
+scenario: S06
+title: HIGH drowsiness persists
+mode: scored
+split: test
+clip:
+  clip_id: 014_noglasses
+  start_s: 72.95
+  end_s: 263.063
+calibration:
+  method: prepend_neutral
+  clip_id: 014_noglasses
+  start_s: 0.0
+  end_s: 15.0
+  source: same clip (span excluded from scoring)
+timeline: []
+expected:
+- The warning repeats about every warning_repeat_s while HIGH

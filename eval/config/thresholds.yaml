@@ -1,0 +1,104 @@
+# Every pass/fail limit, budget and judge setting used by the evaluation lives here.
+# Test cases (eval/golden/scenarios/*.yaml) never contain numbers from this file, so swapping a
+# model (ASR, VAD, LLM, TTS, temporal model) needs zero edits to test cases.
+#
+# Values marked  # DEFAULT  are my starting points; please review them. Values marked
+# # DOC  come from docs/ARCHITECTURE.md (the documented behaviour the app is scored against).
+
+version: 1
+
+run:
+  repeats: 3                   # each case is run this many times
+  repeats_by_scenario: {}      # optional override, e.g. {S01: 1, S02: 1}: whole-clip detection runs are long (real time)
+  seed: 20261127               # harness randomness (audio jitter, judge order); dataset seed is in golden/VERSION
+  case_timeout_s: 900          # hard stop for one case run (then ERROR)
+  settle_after_clip_s: 8       # keep recording this long after the clip ends (late warnings / replies)
+  speech_gate_quiet_s: 1.5      # ... and needs it to be idle (no audio, no reply pending) this long first
+  speech_gate_max_wait_s: 20   # harness waits up to this for the companion to stop talking before speaking (natural turn-taking; S14 overrides)
+
+detection:
+  positive_levels:             # two separate positive classes are scored
+    mild_or_high: MILD         # level >= MILD
+    high_only: HIGH            # level == HIGH
+  frame_lag_s: 0.0             # evaluate the app level this long after each GT frame; 0 = no allowance  # DEFAULT
+  event_early_s: 1.0           # a detection up to this long before the labelled onset still counts  # DEFAULT
+  event_late_s: 3.0            # ... and up to this long after the labelled offset  # DEFAULT
+  min_event_s: 0.5             # GT drowsy runs shorter than this are not events (label flicker)  # DEFAULT
+  merge_event_gap_s: 1.0       # GT drowsy runs separated by less than this are one event  # DEFAULT
+  false_alarm_margin_before_s: 1.0   # warnings this close before an event are not false alarms  # DEFAULT
+  false_alarm_margin_after_s: 5.0    # ... nor this long after its offset  # DEFAULT
+
+safety:
+  warning_latency_s: 5.0       # S02: GT onset -> warning audio must be within this  # DEFAULT
+  decision_to_audio_s: 1.0     # risk crosses HIGH -> warning audio starts  # DEFAULT (pre-rendered warning should be fast)
+  warning_repeat_s: 6.0        # S06: documented repeat interval  # DOC
+  warning_repeat_tolerance_s: 2.0    # accepted |interval - warning_repeat_s|  # DEFAULT
+  chat_mute_s: 10.0            # S05: chat muted this long after a warning  # DOC
+  mild_checkin_after_s: 20.0   # S07: check-in after MILD held this long  # DOC
+  mild_checkin_tolerance_s: 3.0      # DEFAULT
+  mild_checkin_cooldown_s: 120.0     # S07: no further check-in for this long  # DOC (code uses 60, see FINDINGS §7)
+  preemption_max_s: 1.0        # S05: companion audio must stop within this after the warning decision  # DEFAULT
+  watchdog_s: 3.0              # S12: telemetry gap -> "camera signal lost" warning  # DOC
+  watchdog_tolerance_s: 1.5    # DEFAULT
+  occlusion_guard_after_s: 2.0 # S11: no drowsiness warning until this long after the face returns  # DEFAULT
+  quality_min: 0.5             # quality below this = occluded (used only to annotate S11)  # DOC
+  occlusion_risk_epsilon: 0.02 # S11: max allowed risk increase while occluded (rounding)  # DEFAULT
+
+speech:
+  transcript_wait_s: 8.0       # a transcript must arrive within this after speech end, else "missed"  # DEFAULT
+  wer_max:                     # pass limit per SNR (corpus WER over the case's utterances)  # DEFAULT
+    clean: 0.10
+    "20": 0.15
+    "10": 0.25
+    "5": 0.40
+    "0": 0.60
+  false_endpoint_max: 0        # utterances split into >1 transcript  # DEFAULT
+  self_hearing_overlap_max: 0.5      # S13: max share of a transcript's 3-grams found in the companion's recent speech  # DEFAULT
+  self_hearing_window_s: 15.0  # "recent" companion speech for that check  # DEFAULT
+
+latency:                       # seconds; p95 budgets checked as release gates  # DEFAULT
+  transcript_p95_s: 2.5        # speech end -> transcript event
+  first_token_p95_s: 3.0       # transcript -> first LLM token (needs the proxy)
+  reply_text_p95_s: 8.0        # transcript -> final reply text
+  e2e_first_audio_p95_s: 6.0   # speech end -> first companion audio (loopback, else audio event)
+  warning_e2e_p95_s: 5.0       # GT onset -> warning audio
+
+reply:                         # deterministic reply checks  # DEFAULT
+  min_words: 1
+  max_words: 60                # the app's system prompt asks for at most 2 short sentences
+  max_repetition_ratio: 0.3
+
+loopback:                      # speaker-output capture (true audible onset)
+  enabled: true
+  threshold_dbfs: -50.0        # DEFAULT
+  min_segment_s: 0.15          # DEFAULT
+  merge_gap_s: 0.35            # DEFAULT
+
+echo:                          # S13 self-hearing: speaker output fed back into the mic stream
+  gain_db: -12.0               # DEFAULT
+  delay_ms: 60                 # DEFAULT
+
+release_gates:                 # Summary sheet gate table: metric key -> comparison and limit  # DEFAULT
+  - {metric: event_recall_high, op: ">=", value: 0.80}
+  - {metric: false_alarms_per_hour, op: "<=", value: 2.0}
+  - {metric: warning_latency_p95_s, op: "<=", value: 5.0}
+  - {metric: asr_wer_clean, op: "<=", value: 0.10}
+  - {metric: e2e_first_audio_p95_s, op: "<=", value: 6.0}
+  - {metric: judge_claims_alert_rate, op: "<=", value: 0.0}
+
+judge:
+  provider: groq               # groq | gemini | none
+  # Groq: OpenAI-compatible API. Gemini: Google Generative Language API.
+  models:
+    groq: openai/gpt-oss-120b
+    gemini: gemini-2.5-flash   # DEFAULT: set to the Flash model you want (e.g. a newer Flash)
+  api_key_env:                 # keys are read from these environment variables, never from files
+    groq: GROQ_API_KEY
+    gemini: GEMINI_API_KEY
+  family:                      # used to refuse a judge from the same family as the app's LLM
+    groq: openai
+    gemini: google
+  runs: 3                      # each judge question asked this many times; majority wins
+  temperature: 0.3             # >0 so the 3 runs are not identical copies  # DEFAULT
+  timeout_s: 60
+  max_retries: 4               # on HTTP 429 / 5xx, with exponential backoff

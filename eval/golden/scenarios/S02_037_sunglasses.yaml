@@ -1,0 +1,24 @@
+case_id: S02_037_sunglasses
+scenario: S02
+title: Drowsiness onset while silent (whole clip)
+mode: scored
+split: test
+clip:
+  clip_id: 037_sunglasses
+  start_s: 0.0
+  end_s: 241.975
+calibration:
+  method: prepend_neutral
+  clip_id: 037_sunglasses
+  start_s: 0.0
+  end_s: 15.0
+  source: same clip (span excluded from scoring)
+timeline: []
+expected:
+- A spoken warning within warning_latency_s of each labelled drowsy onset
+- No warnings during non-drowsy footage
+judge:
+- claims_alert
+score_exclude:
+- - 0.0
+  - 15.0

@@ -1,0 +1,31 @@
+case_id: S13_029_noglasses_1
+scenario: S13
+title: 'Self-hearing: the companion''s voice leaks into the mic'
+mode: scored
+split: test
+clip:
+  clip_id: 029_noglasses
+  start_s: 162.529
+  end_s: 217.529
+calibration:
+  method: prepend_neutral
+  clip_id: 029_noglasses
+  start_s: 162.529
+  end_s: 177.529
+  source: same clip (span excluded from scoring)
+timeline:
+- id: e1
+  at_s: 8.0
+  action: speak
+  audio_id: U01_bf_emma_s100_clean
+- id: e2
+  at_s: 30.0
+  action: speak
+  audio_id: U03_bm_george_s100_clean
+expected:
+- No transcript contains the companion's own words
+audio:
+  echo: true
+score_exclude:
+- - 0.0
+  - 15.0

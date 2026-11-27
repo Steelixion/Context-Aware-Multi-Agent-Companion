@@ -1,0 +1,24 @@
+case_id: S02_011_nightglasses
+scenario: S02
+title: Drowsiness onset while silent (whole clip)
+mode: scored
+split: dev
+clip:
+  clip_id: 011_nightglasses
+  start_s: 0.0
+  end_s: 506.273
+calibration:
+  method: prepend_neutral
+  clip_id: 011_nightglasses
+  start_s: 277.911
+  end_s: 292.911
+  source: same clip (span excluded from scoring)
+timeline: []
+expected:
+- A spoken warning within warning_latency_s of each labelled drowsy onset
+- No warnings during non-drowsy footage
+judge:
+- claims_alert
+score_exclude:
+- - 277.911
+  - 292.911

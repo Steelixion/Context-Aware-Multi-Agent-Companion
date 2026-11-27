@@ -1,0 +1,49 @@
+# How the harness launches the app under test, and which models it uses.
+# This is the file to edit when you swap a model; test cases and thresholds stay the same.
+# Paths are relative to the repository root.
+
+app:
+  python: backend/.venv/Scripts/python.exe     # the app's own interpreter
+  cwd: backend
+  module: app.main
+  startup_timeout_s: 180       # HTTP + vision + STT ready
+  shutdown_timeout_s: 15       # graceful stop (CTRL_BREAK), then kill
+  base_port: 8790              # each case run gets base_port + n (first free)
+
+# Model settings passed to the app as DC_* environment variables. Leave a value empty to use
+# the app's auto-detected default. These are recorded in the run metadata.
+models:
+  DC_ASR_MODEL_DIR: ""         # default: first model folder in models/stt
+  DC_VAD_MODEL: ""             # default: models/vad/silero_vad_v5.onnx
+  DC_TEMPORAL_MODEL: ""        # default: heuristic (no trained TCN)
+  DC_PIPER_MODELS: ""          # default: auto-detected Piper voices, else OS voices (pyttsx3)
+  DC_FACE_MODEL: ""
+  DC_POSE_MODEL: ""
+  DC_LLM_MODEL: "qwen2.5:7b"   # model name sent to the LLM server
+
+# The app's LLM server. The harness starts a recording proxy and points DC_LLM_URL at it; the
+# proxy forwards to `upstream`. Assumption: Ollama (already installed here) until you choose.
+llm:
+  upstream: http://127.0.0.1:11434/v1
+  family: qwen                 # model family of the app's LLM; the judge must differ
+  proxy: true                  # false: DC_LLM_URL = upstream, LLM stages become NOT OBSERVABLE
+
+# Other app settings for every eval run.
+env:
+  DC_VISION_MODE: camera
+  DC_VISION_FPS: "15"
+  DC_ENABLE_SPEAKER: "1"
+  DC_PROBE_HOST: 127.0.0.1     # no network probe from the sync manager
+  DC_SYNC_INTERVAL: "3600"
+  DC_CALIBRATION_SECONDS: "10"
+
+video:
+  source: virtualcam           # only virtualcam is implemented (wall clock). The app's DC_VIDEO_FILE mode is
+                               # not used: it plays at DC_VISION_FPS, never drops frames and loops (FINDINGS §2)
+  camera_index: auto           # auto = find the OBS Virtual Camera
+  backend: obs
+
+audio:
+  # The app takes 16 kHz int16 PCM on ws://.../ws/audio (DC_MIC_SOURCE=stream); the harness
+  # streams it in real time, 50 ms per message, silence between utterances.
+  chunk_ms: 50

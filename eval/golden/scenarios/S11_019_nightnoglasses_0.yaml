@@ -1,0 +1,26 @@
+case_id: S11_019_nightnoglasses_0
+scenario: S11
+title: Face hidden for 4 s
+mode: scored
+split: test
+clip:
+  clip_id: 019_nightnoglasses
+  start_s: 200.901
+  end_s: 245.901
+calibration:
+  method: prepend_neutral
+  clip_id: 019_nightnoglasses
+  start_s: 200.901
+  end_s: 215.901
+  source: same clip (span excluded from scoring)
+timeline:
+- id: b1
+  at_s: 12.0
+  action: blank_video
+  duration_s: 4.0
+expected:
+- No drowsiness warning while the face is hidden
+- Risk does not rise while quality is low
+score_exclude:
+- - 0.0
+  - 15.0

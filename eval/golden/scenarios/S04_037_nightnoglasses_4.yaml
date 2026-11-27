@@ -1,0 +1,28 @@
+case_id: S04_037_nightnoglasses_4
+scenario: S04
+title: Drowsiness onset while the driver is speaking
+mode: scored
+split: test
+clip:
+  clip_id: 037_nightnoglasses
+  start_s: 363.879
+  end_s: 523.937
+calibration:
+  method: prepend_neutral
+  clip_id: 037_nightnoglasses
+  start_s: 503.937
+  end_s: 518.937
+  source: same clip (span excluded from scoring)
+timeline:
+- id: e1
+  at_s: 13.5
+  action: speak
+  audio_id: U03_bf_emma_s100_clean
+expected:
+- The drowsiness warning still fires in time
+- The warning takes priority over chat
+judge:
+- claims_alert
+score_exclude:
+- - 140.058
+  - 155.058

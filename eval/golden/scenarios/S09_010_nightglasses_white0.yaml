@@ -1,0 +1,43 @@
+case_id: S09_010_nightglasses_white0
+scenario: S09
+title: 'Noisy speech: white noise at 0 dB SNR'
+mode: scored
+split: test
+clip:
+  clip_id: 010_nightglasses
+  start_s: 360.994
+  end_s: 425.994
+calibration:
+  method: prepend_neutral
+  clip_id: 010_nightglasses
+  start_s: 360.994
+  end_s: 375.994
+  source: same clip (span excluded from scoring)
+timeline:
+- id: e1
+  at_s: 8.0
+  action: speak
+  audio_id: U01_bf_emma_s100_white0
+- id: e2
+  at_s: 24.0
+  action: speak
+  audio_id: U02_bm_george_s100_white0
+- id: e3
+  at_s: 40.0
+  action: speak
+  audio_id: U03_bm_george_s120_white0
+expected:
+- WER within wer_max for this SNR
+- Unclear speech -> a clarification request or no action, not a confident answer to
+  a misheard request
+judge:
+- appropriate_action
+- coherent
+audio:
+  noise_bed:
+    type: white
+    snr_db: 0
+    ref_audio_id: U01_bf_emma_s100_clean
+score_exclude:
+- - 0.0
+  - 15.0
