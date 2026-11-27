@@ -1,0 +1,5 @@
+# Golden data is checksummed byte-for-byte: never convert line endings
+*.csv    -text
+*.json   -text
+*.yaml   -text
+*.sha256 -text
