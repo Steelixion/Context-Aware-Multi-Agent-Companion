@@ -66,8 +66,14 @@ class Transcriber:
 class SpeechListener:
     def __init__(self, bus: Bus, loop: asyncio.AbstractEventLoop, arbiter, session,
                  model_dir: str, emotion: EmotionClassifier, num_threads: int = 2,
-                 vad_model: str = "", vad_threshold: float = 0.5):
+                 vad_model: str = "", vad_threshold: float = 0.5, source: str = "device"):
+        if source not in ("device", "stream"):
+            raise ValueError(f"mic source must be 'device' or 'stream', got '{source}'")
         self.bus, self.loop, self.arbiter, self.session = bus, loop, arbiter, session
+        self.source = source
+        self._stream_q: queue.Queue = queue.Queue()
+        self._pending = np.zeros(0, np.float32)
+        self.dropped_samples = 0   # streamed audio that arrived while not listening
         self.model_dir, self.num_threads = model_dir, num_threads
         self.vad_model, self.vad_threshold = vad_model, vad_threshold
         self.emotion = emotion
@@ -123,6 +129,11 @@ class SpeechListener:
             self._set_status("no model")
             _log(f"[stt] disabled: {e}")
             return
+        if self.source == "stream":
+            self._set_status("listening")
+            _log("[stt] listening (streamed audio on /ws/audio)")
+            self._loop(self._stream_q)
+            return
         try:
             import sounddevice as sd
             q: queue.Queue = queue.Queue()
@@ -138,6 +149,24 @@ class SpeechListener:
         except Exception as e:  # noqa: BLE001
             self._set_status("no mic")
             _log(f"[stt] microphone unavailable: {e}")
+
+    def feed(self, samples: np.ndarray) -> None:
+        """Streamed-audio input (mic_source='stream'): 16 kHz mono float32 in any chunk size.
+        Re-blocked to the mic's 50 ms blocks, and each block gets the echo-guard 'muted' flag
+        when it arrives, exactly as the microphone callback does at capture time. Audio sent
+        before the listener is ready is dropped, like sound before a mic is opened."""
+        if self.source != "stream":
+            raise RuntimeError("feed() is only for mic_source='stream'")
+        x = np.asarray(samples, dtype=np.float32).reshape(-1)
+        if self.status != "listening":
+            self.dropped_samples += x.size
+            return
+        buf = np.concatenate([self._pending, x])
+        block = int(SR * BLOCK_S)
+        n = buf.size // block * block
+        for i in range(0, n, block):
+            self._stream_q.put((buf[i:i + block], self._muted()))
+        self._pending = buf[n:]
 
     def _loop(self, q: queue.Queue) -> None:
         """Feed unmuted audio to the VAD; transcribe each utterance it completes."""

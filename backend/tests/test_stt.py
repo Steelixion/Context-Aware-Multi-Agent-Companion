@@ -286,3 +286,76 @@ def test_run_without_microphone_reports_status(monkeypatch, fake_mic):
     lst._run()
     assert lst.status == "no mic"
     assert lst.statuses[-1] == ("stt", dict(status="no mic", engine="parakeet (no mic)"))
+
+
+# ---- streamed-audio input (DC_MIC_SOURCE=stream, /ws/audio) ----
+def _stream_listener(speaking=False):
+    lst = SpeechListener(Bus(), SimpleNamespace(call_soon_threadsafe=lambda *a: None),
+                         SimpleNamespace(speaking=speaking), SimpleNamespace(lang="en"), "",
+                         EmotionClassifier(), source="stream")
+    lst.status = "listening"
+    return lst
+
+
+def _drain(q):
+    out = []
+    while not q.empty():
+        out.append(q.get_nowait())
+    return out
+
+
+def test_stream_feed_reblocks_any_chunk_size_into_50ms_blocks():
+    lst = _stream_listener()
+    block = int(SR * stt.BLOCK_S)
+    x = np.arange(block * 3 + 123, dtype=np.float32) / 1e5
+    for chunk in np.split(x, [7, 500, 801, 2000]):     # uneven chunks, one smaller than a block
+        lst.feed(chunk)
+    items = _drain(lst._stream_q)
+    assert [len(a) for a, _ in items] == [block] * 3
+    assert np.array_equal(np.concatenate([a for a, _ in items]), x[:block * 3])
+    assert len(lst._pending) == 123                      # the remainder waits for more audio
+
+
+def test_stream_feed_marks_blocks_muted_while_companion_speaks():
+    lst = _stream_listener(speaking=True)
+    lst.feed(np.zeros(int(SR * stt.BLOCK_S) * 2, np.float32))
+    assert [m for _, m in _drain(lst._stream_q)] == [True, True]
+    lst.arbiter.speaking = False                         # echo tail still mutes right after
+    lst.feed(np.zeros(int(SR * stt.BLOCK_S), np.float32))
+    assert [m for _, m in _drain(lst._stream_q)] == [True]
+
+
+def test_stream_feed_drops_audio_before_listener_is_ready():
+    lst = _stream_listener()
+    lst.status = "loading"
+    lst.feed(np.zeros(1600, np.float32))
+    assert lst._stream_q.empty() and lst.dropped_samples == 1600
+
+
+def test_stream_feed_rejected_for_device_source_and_bad_source():
+    lst = SpeechListener(Bus(), SimpleNamespace(call_soon_threadsafe=lambda *a: None),
+                         SimpleNamespace(speaking=False), SimpleNamespace(lang="en"), "",
+                         EmotionClassifier())
+    with pytest.raises(RuntimeError):
+        lst.feed(np.zeros(10, np.float32))
+    with pytest.raises(ValueError):
+        SpeechListener(Bus(), None, None, None, "", EmotionClassifier(), source="file")
+
+
+@needs_model
+@needs_vad
+def test_stream_source_runs_vad_on_fed_audio():
+    lst, _ = _listener(segmenter=SileroSegmenter(VAD_MODEL))
+    lst.source = "stream"
+    lst.status = "listening"
+    cut = []
+    lst._handle = lambda audio: cut.append(len(audio) / SR)
+    audio = np.concatenate([silence(1), speech16k("en"), silence(1.5)])
+    for i in range(0, len(audio), 1234):
+        lst.feed(audio[i:i + 1234])
+    lst._stream_q.put(None)                              # sentinel: stop the loop below
+    items = []
+    while (it := lst._stream_q.get()) is not None:
+        items.append(it)
+    lst._loop(_FeedQueue(items, lst))
+    assert len(cut) == 1

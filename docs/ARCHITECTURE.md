@@ -135,7 +135,7 @@ The schema is `app/contracts.py`. Angles and gaze are relative to the driver's c
 
 ## 5. Voice pipeline
 
-1. **Capture.** 16 kHz mono, 50 ms blocks. Each block carries a "muted" flag set in the callback while the companion speaks.
+1. **Capture.** 16 kHz mono, 50 ms blocks. Each block carries a "muted" flag set in the callback while the companion speaks. With `DC_MIC_SOURCE=stream` the audio comes from the `/ws/audio` WebSocket instead of a device (16 kHz int16 PCM, sent in real time); it is re-blocked to 50 ms and gets the same flag on arrival, so VAD, ASR and the echo guard are unchanged.
 2. **VAD.** Silero VAD v5 through sherpa-onnx (CPU, about 0.7 % of one core). Utterances end after 0.8 s of silence, so shorter pauses stay inside one utterance. Sounds under 0.25 s are ignored, and speech longer than 20 s is split. Each segment is re-cut with 0.4 s / 0.3 s of context, which measurably lowers the ASR error rate. If the model is missing, an energy VAD takes over; it only works in a quiet room.
 3. **ASR.** NVIDIA Parakeet TDT 0.6B v2 int8 through sherpa-onnx, CPU only, 2 threads (configurable to 4 when the LLM is idle). It is English-only and returns punctuation and capitalisation.
 4. **Language.** No language code is passed to the recognizer; the published speech event is labelled `en` for downstream compatibility.

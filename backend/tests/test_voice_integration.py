@@ -70,3 +70,48 @@ def test_mic_disabled_reports_stt_off(monkeypatch, tmp_path):
         assert client.get("/api/session").json()["stt"] == "off"
         with client.websocket_connect("/ws") as ws:
             assert ws.receive_json()["stt"] == "off"
+
+
+@needs_model
+@needs_vad
+def test_streamed_audio_over_websocket_reaches_companion(monkeypatch, tmp_path):
+    """DC_MIC_SOURCE=stream: int16 PCM pushed to /ws/audio goes through VAD + ASR like a mic."""
+    from fastapi.testclient import TestClient
+
+    from app.api.server import create_app
+    from app.config import Config
+    for k, v in dict(DC_DATA_DIR=str(tmp_path / "data"), DC_ENABLE_MIC="1", DC_MIC_SOURCE="stream",
+                     DC_ENABLE_SPEAKER="0", DC_VISION_MODE="sim", DC_LLM_URL="http://127.0.0.1:9/v1",
+                     DC_SYNC_INTERVAL="3600").items():
+        monkeypatch.setenv(k, v)
+    audio, sr = load_wav("en")
+    x = np.concatenate([np.zeros(16000, np.float32), resample(audio, sr, 16000), np.zeros(16000 * 2, np.float32)])
+    pcm = (np.clip(x, -1, 1) * 32767).astype("<i2").tobytes()
+    with TestClient(create_app(Config())) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_json()
+            _wait_for(ws, lambda m: m["type"] == "stt" and m["data"]["status"] == "listening", 60)
+            with client.websocket_connect("/ws/audio") as audio_ws:
+                step = 1600 * 2                                   # 100 ms of int16 per message
+                for i in range(0, len(pcm), step):
+                    audio_ws.send_bytes(pcm[i:i + step])
+                    time.sleep(0.02)
+                speech = _wait_for(ws, lambda m: m["type"] == "speech" and m["data"]["source"] == "voice", 60)
+            assert cer(speech["data"]["text"], REFERENCES["en"]) < 0.15, speech
+
+
+def test_streamed_audio_socket_refused_without_stream_source(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    from starlette.websockets import WebSocketDisconnect
+
+    from app.api.server import create_app
+    from app.config import Config
+    monkeypatch.setenv("DC_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("DC_ENABLE_MIC", "0")
+    monkeypatch.setenv("DC_ENABLE_SPEAKER", "0")
+    monkeypatch.setenv("DC_LLM_URL", "http://127.0.0.1:9/v1")
+    with TestClient(create_app(Config())) as client:
+        with client.websocket_connect("/ws/audio") as ws:
+            with pytest.raises(WebSocketDisconnect) as e:
+                ws.receive_bytes()
+            assert e.value.code == 1008

@@ -88,7 +88,8 @@ class Runtime:
         if cfg.enable_mic:
             self.listener = SpeechListener(self.bus, loop, self.arbiter, self.session,
                                            cfg.asr_model_dir, EmotionClassifier(cfg.ser_model),
-                                           cfg.asr_threads, cfg.vad_model, cfg.vad_threshold)
+                                           cfg.asr_threads, cfg.vad_model, cfg.vad_threshold,
+                                           cfg.mic_source)
             self.listener.start()
 
     def _bridge(self, q, topic: str) -> None:

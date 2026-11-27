@@ -106,6 +106,9 @@ class Config:
 
     # --- audio (speech-to-text runs on the CPU only) ---
     enable_mic: bool = field(default_factory=lambda: _env("ENABLE_MIC", False, _bool))
+    # "device": the system default microphone. "stream": 16 kHz int16 PCM pushed over the
+    # /ws/audio WebSocket in real time (evaluation harness, recorded drives); same VAD/ASR path
+    mic_source: str = field(default_factory=lambda: _env("MIC_SOURCE", "device"))
     enable_speaker: bool = field(default_factory=lambda: _env("ENABLE_SPEAKER", True, _bool))
     asr_model_dir: str = field(default_factory=lambda: _env("ASR_MODEL_DIR", _discover_asr()))
     asr_threads: int = field(default_factory=lambda: _env("ASR_THREADS", 2, int))

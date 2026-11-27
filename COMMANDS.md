@@ -165,6 +165,7 @@ Every setting is an environment variable named `DC_<NAME>`.
 | `DC_TEMPORAL_MODEL` | | trained TCN (`.onnx`); see `app/vision/temporal_model.py` for the input contract |
 | `DC_FACE_MODEL`, `DC_POSE_MODEL` | `models/vision/...` | MediaPipe model files |
 | `DC_ENABLE_MIC` | `0` | `1` turns on voice input |
+| `DC_MIC_SOURCE` | `device` | `device` = default microphone; `stream` = 16 kHz mono int16 PCM sent in real time to the `/ws/audio` WebSocket (used by the evaluation harness in `eval/`) |
 | `DC_ENABLE_SPEAKER` | `1` | `0` disables audio output |
 | `DC_ASR_MODEL_DIR` | `models/stt/...` | speech-to-text model folder |
 | `DC_ASR_THREADS` | `2` | CPU threads for Parakeet; raise to `4` when the LLM is idle |

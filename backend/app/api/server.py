@@ -4,6 +4,7 @@ import asyncio
 import json
 from contextlib import asynccontextmanager
 
+import numpy as np
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -157,6 +158,25 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         finally:
             send_task.cancel()
             rt.bus.unsubscribe("*", q)
+
+    @app.websocket("/ws/audio")
+    async def ws_audio(sock: WebSocket):
+        """Streamed microphone (DC_ENABLE_MIC=1, DC_MIC_SOURCE=stream): binary messages of
+        16 kHz mono int16 little-endian PCM, sent in real time. One sender at a time."""
+        await sock.accept()
+        lst = rt.listener
+        if lst is None or lst.source != "stream":
+            await sock.close(code=1008, reason="streamed audio needs DC_ENABLE_MIC=1 and DC_MIC_SOURCE=stream")
+            return
+        try:
+            while True:
+                data = await sock.receive_bytes()
+                if len(data) % 2:
+                    continue                      # not int16 PCM: ignore, keep the socket
+                pcm = np.frombuffer(data, dtype="<i2").astype(np.float32) / 32768.0
+                lst.feed(pcm)
+        except (WebSocketDisconnect, KeyError):   # KeyError: a text frame where bytes were expected
+            pass
 
     if DIST.exists():
         app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
